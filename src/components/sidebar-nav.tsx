@@ -97,7 +97,7 @@ export function SidebarNav() {
           }`}
         >
           {isCollapsed ? (
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center">
               <button
                 onClick={toggleCollapse}
                 className="flex size-8 items-center justify-center rounded-md transition-transform hover:scale-105 active:scale-95"
@@ -105,7 +105,6 @@ export function SidebarNav() {
               >
                 <InkCraftMark className="size-7 text-foreground" />
               </button>
-              <ThemeToggle className="size-8" />
             </div>
           ) : (
             <>
@@ -212,6 +211,7 @@ export function SidebarNav() {
         >
           {isCollapsed ? (
             <>
+              <ThemeToggle className="mx-auto size-9" />
               <Link
                 href="/agents"
                 title="编辑部"
