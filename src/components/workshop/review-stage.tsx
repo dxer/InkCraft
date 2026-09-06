@@ -3,6 +3,7 @@
 import {
   Bookmark,
   Check,
+  X,
   Copy,
   Download,
   FileCheck,
@@ -15,7 +16,6 @@ import {
   RefreshCw,
   Share2,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { marked } from "marked";
@@ -72,7 +72,8 @@ export function ReviewStage({
   const [wechatCopied, setWechatCopied] = useState(false);
 
   const completed = project.currentStage === "completed";
-  const passed = (report?.score ?? 0) >= PASS_SCORE;
+  const checklistOk = report ? report.checklist.every((i) => i.pass) : false;
+  const passed = checklistOk && (report?.score ?? 0) >= PASS_SCORE;
 
   async function runReview() {
     if (!canvasContent.trim()) return;
@@ -132,8 +133,9 @@ export function ReviewStage({
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      toast("装配完成，作品已收入成品库", "success");
+      toast("母稿已锁定", "success");
       onProjectUpdate(data.project);
+      onOpenSaveKb("master");
     } catch {
       toast("完成装配失败，请稍后重试", "error");
     } finally {
@@ -176,10 +178,10 @@ export function ReviewStage({
         <div>
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">
             <FileCheck className="size-4 text-primary" />
-            编审报告
+            核稿清单
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            出版级自检：逻辑断层、信息密度与事实可信度。
+            机械校验先行，四项核稿，全过才可锁定。
           </p>
         </div>
 
@@ -235,12 +237,12 @@ export function ReviewStage({
           {loadingReview ? (
             <>
               <Loader2 className="size-3.5 animate-spin" />
-              总编审校自检中...
+              核稿进行中...
             </>
           ) : (
             <>
               <FileCheck className="size-3.5" />
-              {report ? "重新运行编审审查" : "运行金线编审审查"}
+              {report ? "重新核稿" : "运行核稿"}
             </>
           )}
         </Button>
@@ -295,7 +297,7 @@ export function ReviewStage({
                   ) : (
                     <Check className="size-3.5" />
                   )}
-                  {completed ? "已完成装配" : "通过并完成装配"}
+                  {completed ? "母稿已锁定" : "全部通过 · 锁定母稿"}
                 </Button>
               ) : (
                 <Button
@@ -304,7 +306,7 @@ export function ReviewStage({
                   variant="outline"
                 >
                   <PenLine className="size-3.5" />
-                  分数未达标 · 回到起草修改
+                  核稿未通过 · 回到起草修改
                 </Button>
               )}
               <Button
@@ -317,86 +319,39 @@ export function ReviewStage({
               </Button>
             </div>
 
-            {/* 逻辑断层 */}
-            {report.logicIssues?.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 font-semibold text-muted-foreground">
-                  <Zap className="size-3.5" />
-                  逻辑断层与修改建议
-                </div>
-                {report.logicIssues.map((item, i) => (
-                  <div
-                    key={i}
-                    className="space-y-0.5 rounded-lg border bg-card p-2.5 text-[11px]"
-                  >
-                    <div className="font-medium text-foreground">
-                      {item.issue}
-                    </div>
-                    <div className="text-muted-foreground">
-                      {item.suggestion}
-                    </div>
+            {/* 四项核稿清单 */}
+            <div className="space-y-1.5">
+              <div className="font-semibold text-muted-foreground">核稿清单</div>
+              {report.checklist.map((item) => (
+                <div
+                  key={item.key}
+                  className={cn(
+                    "space-y-0.5 rounded-lg border p-2.5 text-[11px]",
+                    item.pass ? "border-emerald-500/25 bg-emerald-500/[0.04]" : "border-destructive/40 bg-destructive/[0.04]",
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 font-medium">
+                    {item.pass ? (
+                      <Check className="size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <X className="size-3 shrink-0 text-destructive" />
+                    )}
+                    {item.label}
                   </div>
-                ))}
-              </div>
-            )}
+                  {item.note && <div className="text-muted-foreground">{item.note}</div>}
+                </div>
+              ))}
+            </div>
 
-            {/* 信息密度 */}
-            {report.densityNotes?.length > 0 && (
+            {/* 机械校验：未溯源数字 */}
+            {report.untraceable.length > 0 && (
               <div className="space-y-1.5">
                 <div className="font-semibold text-muted-foreground">
-                  📉 信息密度与废话率
+                  机械校验 · 未能指回素材的数字
                 </div>
-                {report.densityNotes.map((item, i) => (
-                  <div
-                    key={i}
-                    className="space-y-0.5 rounded-lg border bg-card p-2.5 text-[11px]"
-                  >
-                    <div className="font-medium text-foreground">
-                      {item.finding}
-                    </div>
-                    <div className="text-muted-foreground">
-                      {item.suggestion}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 事实核查 */}
-            {report.factChecks?.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="font-semibold text-muted-foreground">
-                  🔍 事实与数据可信度
-                </div>
-                {report.factChecks.map((fc, i) => (
-                  <div
-                    key={i}
-                    className="space-y-1 rounded-lg border bg-card p-2.5 text-[11px]"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-foreground">
-                        {fc.statement}
-                      </span>
-                      <Badge
-                        variant={
-                          fc.credibility === "high" ? "secondary" : "outline"
-                        }
-                        className={cn(
-                          "shrink-0 text-[10px]",
-                          fc.credibility === "high" &&
-                            "text-emerald-600 dark:text-emerald-400",
-                          fc.credibility === "unverified" &&
-                            "text-amber-600 dark:text-amber-400",
-                        )}
-                      >
-                        {fc.credibility === "high"
-                          ? "已验证"
-                          : fc.credibility === "medium"
-                            ? "需确认"
-                            : "待求证"}
-                      </Badge>
-                    </div>
-                    <div className="text-muted-foreground">{fc.note}</div>
+                {report.untraceable.map((u, i) => (
+                  <div key={i} className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-2.5 text-[11px] leading-relaxed text-foreground/90">
+                    {u}
                   </div>
                 ))}
               </div>

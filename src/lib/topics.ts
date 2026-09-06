@@ -1,0 +1,551 @@
+import { randomUUID } from "node:crypto";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateText } from "ai";
+import { parseCardFields } from "./card-md";
+import { getDb } from "./db";
+import { getAgentForStage } from "./pipeline";
+import { getByok, getSettings, setSetting } from "./settings";
+import { PLATFORM_SKILLS, type PlatformSkillId, type TopicRepositoryItem } from "./types";
+
+export interface TopicFilterOptions {
+  status?: "all" | "idea" | "used" | "archived";
+  targetSkill?: string;
+  search?: string;
+  sourceType?: "all" | "auto" | "manual";
+  limit?: number;
+  offset?: number;
+}
+
+export interface TopicStats {
+  total: number;
+  ideas: number;
+  used: number;
+  archived: number;
+  bySkill: Record<string, number>;
+  lastScannedAt: string | null;
+  newNotesSinceLastScan: number;
+}
+
+const SETTING_KEY_LAST_SCANNED = "topic_mining.last_scanned_at";
+
+const SKILL_NAME_MAP: Record<PlatformSkillId, string> = {
+  wechat: "微信公众号 · 深度叙事",
+  xiaohongshu: "小红书笔记 · 痛点爆款",
+  zhihu: "知乎回答 · 深度思辨",
+  x_thread: "X / 即刻短文 · 极速穿透",
+  master: "通用母稿 · 严谨立论",
+};
+
+function computeDefaultScore(title: string, skill: string, matchedCardsCount: number): { score: number; scoreTag: string } {
+  let score = 90;
+  if (title.length >= 15 && title.length <= 35) score += 3;
+  if (matchedCardsCount >= 2) score += 3;
+  if (matchedCardsCount >= 1) score += 1;
+  if (title.includes("？") || title.includes("！") || title.includes("：") || title.includes("——") || title.includes("90%") || title.includes("为什么")) score += 1;
+  score = Math.min(score, 98);
+
+  let tag = "🔥 爆款潜质";
+  if (skill === "zhihu") tag = "💡 深度思辨";
+  else if (skill === "xiaohongshu") tag = "📌 痛点爆款";
+  else if (skill === "x_thread") tag = "⚡ 高密穿透";
+  else if (score >= 95) tag = "🏆 重磅首选";
+
+  return { score, scoreTag: tag };
+}
+
+/** 从数据库映射选题条目 */
+function mapTopicRow(row: any): TopicRepositoryItem {
+  let outline: string[] = [];
+  try {
+    outline = row.outline ? JSON.parse(row.outline) : [];
+  } catch {}
+
+  let matchedCards: any[] = [];
+  try {
+    matchedCards = row.matched_cards ? JSON.parse(row.matched_cards) : [];
+  } catch {}
+
+  let sourceNoteIds: string[] = [];
+  try {
+    sourceNoteIds = row.source_note_ids ? JSON.parse(row.source_note_ids) : [];
+  } catch {}
+
+  const skill = (row.target_skill || "wechat") as PlatformSkillId;
+  const def = computeDefaultScore(row.title || "", skill, matchedCards.length);
+  const score = typeof row.score === "number" && row.score > 0 ? row.score : def.score;
+  const scoreTag = row.score_tag || def.scoreTag;
+
+  return {
+    id: row.id,
+    title: row.title,
+    angle: row.angle || "",
+    hook: row.hook || "",
+    targetSkill: skill,
+    targetSkillName: SKILL_NAME_MAP[skill] || "平台创作",
+    score,
+    scoreTag,
+    outline,
+    matchedCards,
+    sourceNoteIds,
+    sourceType: (row.source_type || "auto") as "auto" | "manual",
+    status: (row.status || "idea") as "idea" | "used" | "archived",
+    usedProjectId: row.used_project_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** 获取选题列表 */
+export function getTopicsFromDb(options: TopicFilterOptions = {}): TopicRepositoryItem[] {
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (options.status && options.status !== "all") {
+    conditions.push("status = ?");
+    params.push(options.status);
+  }
+
+  if (options.targetSkill && options.targetSkill !== "all") {
+    conditions.push("target_skill = ?");
+    params.push(options.targetSkill);
+  }
+
+  if (options.sourceType && options.sourceType !== "all") {
+    conditions.push("source_type = ?");
+    params.push(options.sourceType);
+  }
+
+  if (options.search && options.search.trim()) {
+    conditions.push("(title LIKE ? OR angle LIKE ?)");
+    const kw = `%${options.search.trim()}%`;
+    params.push(kw, kw);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const limitClause = options.limit ? `LIMIT ${Number(options.limit)}` : "";
+  const offsetClause = options.offset ? `OFFSET ${Number(options.offset)}` : "";
+
+  const query = `
+    SELECT id, title, angle, hook, target_skill, score, score_tag, outline, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at
+    FROM topic_repository
+    ${whereClause}
+    ORDER BY created_at DESC
+    ${limitClause} ${offsetClause}
+  `;
+
+  const rows = db.prepare(query).all(...params);
+  return rows.map(mapTopicRow);
+}
+
+/** 获取选题库整体统计及新笔记扫描状态 */
+export function getTopicStats(): TopicStats {
+  const db = getDb();
+  const settings = getSettings();
+  const lastScannedAt = settings[SETTING_KEY_LAST_SCANNED] || null;
+
+  const totalRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository").get() as { count: number };
+  const ideasRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'idea'").get() as { count: number };
+  const usedRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'used'").get() as { count: number };
+  const archivedRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'archived'").get() as { count: number };
+
+  const skillRows = db.prepare("SELECT target_skill, COUNT(*) as count FROM topic_repository GROUP BY target_skill").all() as { target_skill: string; count: number }[];
+  const bySkill: Record<string, number> = {};
+  for (const r of skillRows) {
+    bySkill[r.target_skill] = r.count;
+  }
+
+  // 统计自上次扫描以来新增的独立笔记数量
+  let newNotesCount = 0;
+  if (lastScannedAt) {
+    const newNotesRow = db.prepare(
+      "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ?"
+    ).get(lastScannedAt) as { count: number };
+    newNotesCount = newNotesRow?.count || 0;
+  } else {
+    const allNotesRow = db.prepare(
+      "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL"
+    ).get() as { count: number };
+    newNotesCount = allNotesRow?.count || 0;
+  }
+
+  return {
+    total: totalRow?.count || 0,
+    ideas: ideasRow?.count || 0,
+    used: usedRow?.count || 0,
+    archived: archivedRow?.count || 0,
+    bySkill,
+    lastScannedAt,
+    newNotesSinceLastScan: newNotesCount,
+  };
+}
+
+/**
+ * 保存单个选题到选题库（严格根据标题查重）
+ * 若已存在相同标题的选题，则跳过或合并更新，杜绝重复产生。
+ */
+export function saveTopicToRepository(
+  item: Partial<TopicRepositoryItem> & { title: string }
+): { topic: TopicRepositoryItem; created: boolean } {
+  const db = getDb();
+  const cleanTitle = item.title.trim();
+  if (!cleanTitle) {
+    throw new Error("选题标题不能为空");
+  }
+
+  const existing = db
+    .prepare("SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?")
+    .get(cleanTitle);
+
+  if (existing) {
+    return {
+      topic: mapTopicRow(existing),
+      created: false,
+    };
+  }
+
+  const id = item.id || randomUUID();
+  const targetSkill = item.targetSkill || "wechat";
+  const def = computeDefaultScore(cleanTitle, targetSkill, (item.matchedCards || []).length);
+  const score = typeof item.score === "number" && item.score > 0 ? item.score : def.score;
+  const scoreTag = item.scoreTag || def.scoreTag;
+  const outlineJson = JSON.stringify(item.outline || []);
+  const matchedCardsJson = JSON.stringify(item.matchedCards || []);
+  const sourceNoteIdsJson = JSON.stringify(item.sourceNoteIds || []);
+  const sourceType = item.sourceType || "manual";
+  const status = item.status || "idea";
+
+  db.prepare(`
+    INSERT INTO topic_repository (
+      id, title, angle, hook, target_skill, score, score_tag, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `).run(
+    id,
+    cleanTitle,
+    item.angle || "",
+    item.hook || "",
+    targetSkill,
+    score,
+    scoreTag,
+    outlineJson,
+    matchedCardsJson,
+    sourceNoteIdsJson,
+    sourceType,
+    status
+  );
+
+  const inserted = db
+    .prepare("SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE id = ?")
+    .get(id);
+
+  return {
+    topic: mapTopicRow(inserted),
+    created: true,
+  };
+}
+
+/** 批量保存选题到选题库 */
+export function batchSaveTopicsToRepository(
+  items: Array<Partial<TopicRepositoryItem> & { title: string }>
+): { savedCount: number; topics: TopicRepositoryItem[] } {
+  const results: TopicRepositoryItem[] = [];
+  let savedCount = 0;
+  for (const item of items) {
+    if (!item.title || !item.title.trim()) continue;
+    const { topic, created } = saveTopicToRepository(item);
+    results.push(topic);
+    if (created) savedCount++;
+  }
+  return { savedCount, topics: results };
+}
+
+/** 更新选题状态 */
+export function updateTopicStatusInDb(id: string, status: "idea" | "used" | "archived"): boolean {
+  const db = getDb();
+  const res = db.prepare("UPDATE topic_repository SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(status, id);
+  return res.changes > 0;
+}
+
+/** 删除选题 */
+export function deleteTopicFromDb(id: string): boolean {
+  const db = getDb();
+  const res = db.prepare("DELETE FROM topic_repository WHERE id = ?").run(id);
+  return res.changes > 0;
+}
+
+/**
+ * 每小时定时选题生成核心算法：
+ * 1. 检查距离上次扫描是否已超过 1 小时（支持 force 立即执行）；
+ * 2. 仅查询上次扫描之后收录的全新笔记（如果该时段无新收录，直接退出，消耗 0 Token）；
+ * 3. 获取历史已存在的选题标题，在 Prompt 中强制声明防重；
+ * 4. 针对新收录笔记生成高价值平台选题，落库到 topic_repository；
+ * 5. 刷新上次扫描时间戳。
+ */
+export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}): Promise<{
+  ran: boolean;
+  reason?: string;
+  newNotesCount: number;
+  savedTopicsCount: number;
+  topics: TopicRepositoryItem[];
+}> {
+  const db = getDb();
+  const settings = getSettings();
+  const lastScannedAt = settings[SETTING_KEY_LAST_SCANNED];
+  const now = new Date();
+
+  // 1. 周期时间检查（若未强制且未满 1 小时，则跳过）
+  if (!options.force && lastScannedAt) {
+    const elapsedMs = now.getTime() - new Date(lastScannedAt).getTime();
+    if (elapsedMs < 60 * 60 * 1000) {
+      const remainingMinutes = Math.ceil((60 * 60 * 1000 - elapsedMs) / 60000);
+      return {
+        ran: false,
+        reason: `距离上次分析不足 1 小时（约剩余 ${remainingMinutes} 分钟），暂不执行周期分析`,
+        newNotesCount: 0,
+        savedTopicsCount: 0,
+        topics: [],
+      };
+    }
+  }
+
+  // 2. 查询自上次扫描以来新收录的笔记（按创建时间升序，取最新 10 篇）
+  let newNotes: Array<{ id: string; title: string | null; content: string; created_at: string }> = [];
+  if (lastScannedAt) {
+    newNotes = db.prepare(
+      "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ? ORDER BY created_at DESC LIMIT 10"
+    ).all(lastScannedAt) as any[];
+  } else {
+    // 首次运行时，只取最新收录的 3 篇笔记作为试点，避免全库分析导致 Token 爆炸
+    newNotes = db.prepare(
+      "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL ORDER BY created_at DESC LIMIT 3"
+    ).all() as any[];
+  }
+
+  // 查重抑制：如果新笔记在选题库中已经存在待创作（status = 'idea'）的选题，则予以排除，防止同一篇笔记被反复生成多个选题
+  const existingIdeaTopicRows = db
+    .prepare("SELECT source_note_ids FROM topic_repository WHERE status = 'idea'")
+    .all() as { source_note_ids: string | null }[];
+  const coveredNoteIds = new Set<string>();
+  for (const row of existingIdeaTopicRows) {
+    try {
+      if (row.source_note_ids) {
+        const ids = JSON.parse(row.source_note_ids);
+        if (Array.isArray(ids)) {
+          for (const nid of ids) coveredNoteIds.add(nid);
+        }
+      }
+    } catch {}
+  }
+
+  const unminedNotes = options.force
+    ? newNotes
+    : newNotes.filter((n) => !coveredNoteIds.has(n.id));
+
+  // 若无可分析的新收录笔记：更新扫描时间戳，直接跳过，0 token 消耗！
+  if (unminedNotes.length === 0) {
+    setSetting(SETTING_KEY_LAST_SCANNED, now.toISOString());
+    return {
+      ran: false,
+      reason: newNotes.length > 0
+        ? "新收录笔记已在选题库中拥有待创作选题，跳过重复生成（0 Token 消耗）"
+        : "该周期内没有新收录的内容，跳过选题生成（0 Token 消耗）",
+      newNotesCount: newNotes.length,
+      savedTopicsCount: 0,
+      topics: [],
+    };
+  }
+
+  // 3. 提取新笔记关联的知识卡片（若有）
+  const noteIds = unminedNotes.map((n) => n.id);
+  const placeholders = noteIds.map(() => "?").join(",");
+  const cardRows = db.prepare(`
+    SELECT c.id, c.document_id, c.content_md, ki.title AS note_title
+    FROM knowledge_cards c
+    JOIN knowledge_items ki ON ki.id = c.document_id
+    WHERE c.document_id IN (${placeholders})
+  `).all(...noteIds) as Array<{ id: string; document_id: string; content_md: string; note_title: string | null }>;
+
+  const cardMap = new Map(cardRows.map((c) => [c.document_id, c]));
+
+  // 4. 获取历史已存在的选题标题，杜绝重复
+  const existingTitles = (db
+    .prepare("SELECT title FROM topic_repository ORDER BY created_at DESC LIMIT 80")
+    .all() as Array<{ title: string }>).map((r) => r.title.trim());
+
+  // 5. 组装输入语料
+  const noteMaterials = unminedNotes.map((n, idx) => {
+    const card = cardMap.get(n.id);
+    if (card) {
+      const f = parseCardFields(card.content_md);
+      return `【新收录资料 ${idx + 1}】《${n.title || "未命名笔记"}》 (ID: ${n.id})\n  核心主张：${f.claim || n.title}\n  边界/切口：${f.applicable || f.cut || "通用"}\n  原文提要：${n.content.slice(0, 200).replace(/\n/g, " ")}`;
+    }
+    return `【新收录资料 ${idx + 1}】《${n.title || "未命名笔记"}》 (ID: ${n.id})\n  内容提要：${n.content.slice(0, 300).replace(/\n/g, " ")}`;
+  }).join("\n\n");
+
+  const cfg = getByok();
+  const topicAgent = getAgentForStage("topic");
+
+  let generatedRawTopics: any[] = [];
+
+  if (cfg) {
+    try {
+      const provider = createOpenAICompatible({
+        name: "inkcraft",
+        baseURL: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+      });
+
+      const existingConstraint = existingTitles.length > 0
+        ? `\n【历史已存在的选题库（严禁重复或高度雷同！）】：\n${existingTitles.slice(0, 40).map((t, i) => `${i + 1}. ${t}`).join("\n")}`
+        : "";
+
+      const systemPrompt =
+        topicAgent?.system_prompt ||
+        `你是选题总监与爆款内容策划专家。
+你的任务是专门针对创作者刚刚新收录的这批知识材料进行精益选题策划。
+
+严格遵循三大收敛原则（拒绝泛滥，注重精度与张力）：
+1. 【一笔记一黄金选题】：针对每一篇输入的新笔记，自动研判其最契合的单一平台属性（硬核技术/思辨选知乎，痛点实操/避坑选小红书，深度叙事/专栏选公众号，认知金句选X短文），每篇笔记只产出 1 个最精准的黄金选题，绝不在单篇笔记上泛滥发散；
+2. 【跨笔记交叉融合】：如果本次输入包含 2 篇及以上笔记，额外挑选 2 篇具有观点呼应、反常识张力或互为论据的笔记，合成 1 个【跨界融合大选题】；
+3. 【严格防重】：绝对不能与历史已有的选题库标题重复，必须产生新颖、具洞察力的全新切角；
+4. 严格输出 JSON 数组，不带任何思考或说明文字。`;
+
+      const userPrompt = [
+        `【创作者刚刚收录的全新知识材料（共 ${unminedNotes.length} 篇）】：\n${noteMaterials}`,
+        existingConstraint,
+        `\n请输出选题方案：对每篇资料出 1 个黄金选题（${unminedNotes.length} 个）${unminedNotes.length >= 2 ? " + 1 个跨资料交叉融合选题" : ""}，严格输出 JSON 格式如下：
+[
+  {
+    "title": "爆款标题（极具吸引力且契合新材料，绝不与历史选题重复）",
+    "angle": "核心论据切角与论证重点（1-2句）",
+    "hook": "正文开头第一段的吸睛引子/冲突破题句",
+    "targetSkill": "wechat | xiaohongshu | zhihu | x_thread | master",
+    "outline": [
+      "一、章节/分点1",
+      "二、章节/分点2",
+      "三、章节/分点3"
+    ],
+    "materialIndices": [1] // 对应引用的新收录资料序号 (1-based index)
+  }
+]`,
+      ].join("\n\n");
+
+      const { text } = await generateText({
+        model: provider.chatModel(topicAgent?.model || cfg.model),
+        system: systemPrompt,
+        prompt: userPrompt,
+        temperature: topicAgent?.temperature || 0.85,
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(60_000),
+      });
+
+      const start = text.indexOf("[");
+      const end = text.lastIndexOf("]");
+      if (start !== -1 && end > start) {
+        generatedRawTopics = JSON.parse(text.slice(start, end + 1));
+      }
+    } catch (err) {
+      console.error("[topics] hourly topic mining LLM error:", err);
+    }
+  }
+
+  // 兜底方案（未配置 LLM 或 LLM 异常时）
+  if (!Array.isArray(generatedRawTopics) || generatedRawTopics.length === 0) {
+    // 1 篇笔记产出 1 个专属选题
+    generatedRawTopics = unminedNotes.map((note, idx) => {
+      const title = note.title || `新知识沉淀 #${idx + 1}`;
+      return {
+        title: `从「${title}」看知识复利：如何把单篇输入转化为高密度爆款？`,
+        angle: `针对《${title}》的核心论点，剖析如何将单点认知转化为结构化表达。`,
+        hook: "每一条新加入知识库的笔记，都不该成为沉睡的数字资产，而是随时待命的作品零件。",
+        targetSkill: idx % 2 === 0 ? "wechat" : "zhihu",
+        outline: [
+          "一、新素材入库的第一刀：如何精准提纯核心主张",
+          "二、论证展开：从单点事实到逻辑闭环",
+          "三、闭环交付：多场景实践指南",
+        ],
+        materialIndices: [idx + 1],
+      };
+    });
+
+    // 若有多篇笔记，追加 1 个跨界融合选题
+    if (unminedNotes.length >= 2) {
+      generatedRawTopics.push({
+        title: `当「${unminedNotes[0].title || "技术"}」遇到「${unminedNotes[1].title || "认知"}」：跨界融合的底层逻辑`,
+        angle: "把看似独立的两篇笔记观点进行跨领域张力碰撞，提炼出超越单一维度的洞察。",
+        hook: "创新的本质不是凭空造物，而是把不同领域的常识连接在一起，产生新的认知突破。",
+        targetSkill: "wechat",
+        outline: [
+          "一、两重维度的表象割裂与底层共通点",
+          "二、张力碰撞：交叉视角带来的认知跃迁",
+          "三、新范式落地：跨界融合的行动指南",
+        ],
+        materialIndices: [1, 2],
+      });
+    }
+  }
+
+  // 6. 落库保存并排重
+  const savedTopics: TopicRepositoryItem[] = [];
+  for (const raw of generatedRawTopics) {
+    const title = String(raw.title || "").trim();
+    if (!title) continue;
+    // 双重排重检查：既不与库中历史重复，也不与本批次新生成的重复
+    if (existingTitles.includes(title) || savedTopics.some((t) => t.title === title)) {
+      continue;
+    }
+
+    const targetSkill = (["wechat", "xiaohongshu", "zhihu", "x_thread", "master"].includes(raw.targetSkill)
+      ? raw.targetSkill
+      : "wechat") as PlatformSkillId;
+
+    const matIdxs: number[] = Array.isArray(raw.materialIndices) ? raw.materialIndices : [1];
+    const sourceNotes = matIdxs.map((i) => unminedNotes[i - 1]).filter(Boolean);
+    const sourceNoteIds = sourceNotes.map((n) => n.id);
+
+    const matchedCards = sourceNotes.map((n) => {
+      const card = cardMap.get(n.id);
+      if (card) {
+        const f = parseCardFields(card.content_md);
+        return {
+          id: card.id,
+          docId: card.document_id,
+          claim: f.claim || card.note_title || "",
+          noteTitle: card.note_title || "关联笔记",
+        };
+      }
+      return {
+        id: n.id,
+        docId: n.id,
+        claim: n.title || "知识笔记",
+        noteTitle: n.title || "关联笔记",
+      };
+    });
+
+    const { topic, created } = saveTopicToRepository({
+      title,
+      angle: String(raw.angle || "").trim(),
+      hook: String(raw.hook || "").trim(),
+      targetSkill,
+      outline: Array.isArray(raw.outline) ? raw.outline.map(String) : [],
+      matchedCards,
+      sourceNoteIds,
+      sourceType: "auto",
+      status: "idea",
+    });
+
+    if (created) {
+      savedTopics.push(topic);
+    }
+  }
+
+  // 7. 更新扫描时间戳
+  setSetting(SETTING_KEY_LAST_SCANNED, now.toISOString());
+
+  return {
+    ran: true,
+    newNotesCount: unminedNotes.length,
+    savedTopicsCount: savedTopics.length,
+    topics: savedTopics,
+  };
+}

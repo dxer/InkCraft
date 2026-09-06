@@ -3,57 +3,50 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { getDb } from "./db";
 import { getByok, type ByokConfig } from "./settings";
+import type { KnowledgeCard } from "./types";
 
-/** 一张笔记知识卡片：整卡内容就是一份 markdown 文档，无分字段 schema */
-export interface KnowledgeCard {
-  id: string;
-  document_id: string;
-  content_md: string;
-  created_at?: string;
-  updated_at?: string;
-}
+export type { KnowledgeCard };
 
 /** 卡片萃取技能在编辑部的工位 id（提示词可在编辑部随时修改，萃取时实时读取） */
 export const CARD_EXTRACT_AGENT_ID = "agent_card_extract";
 
-const CARD_EXTRACT_AGENT_NAME = "墨小萃 · 卡片萃取师";
-const CARD_EXTRACT_AGENT_PERSONA = "极度克制、讲究实操的卡片萃取师，把文章萃成一张能出货的弹药卡";
+const CARD_EXTRACT_AGENT_NAME = "墨小萃 · 知识卡片萃取师";
+const CARD_EXTRACT_AGENT_PERSONA = "顶尖的认知提纯与知识卡片萃取专家，擅长从长文中提取极具反常识张力与二次创作价值的核心洞察、边界、零件与破题金句";
 
 /** 卡片提取提示词默认值：首次萃取时写入编辑部（custom_agents），之后以编辑部里的为准 */
-export const CARD_EXTRACT_DEFAULT_PROMPT = `你是一位极度克制、讲究实操的卡片萃取师。把用户提供的文章/笔记，提炼成一张可直接用于内容创作的「知识卡片」——不是摘要，而是带判断、能出货的弹药卡。
+export const CARD_EXTRACT_DEFAULT_PROMPT = `你是顶尖的知识卡片萃取专家与认知提纯师。
+你的任务是将输入的笔记资料压缩提纯为一张【极具二次创作价值与思想穿透力】的原子知识卡片。
 
-直接输出一份完整的 Markdown 文档（不要 JSON、不要用代码块包裹），八项结构固定，每节用一级标题（#），标题文字原样保留：
+工作准则：
+1. 拒绝平庸的事实陈述（如“本文介绍了某某方法”），只提取具有反常识张力、底层逻辑突破或深层行动启发的「硬核洞察」；
+2. 严禁凭空胡编数据或套话，所有判断与零件依据必须忠实源于原文，但提炼必须锋利、一针见血；
+3. 输出纯粹的 Markdown 结构，不要输出任何额外的开头问候或思考过程。
 
-# 一句话观点
-> （40-80字，有判断、有锋芒；绝不写成"这篇文章讲了XX重要性"这种无判断转述）
+输出格式（严格采用以下 6 个结构化二级标题）：
 
-# 适用对象 + 场景
-（谁、在什么情况下用得上。如：一个人做自媒体、库里一堆笔记却不知道发什么时）
+## 核心洞察
+（一句最具穿透力与认知增量的底层判断，不超过 35 字，保留限定条件，直击事物本质）
 
-# 三个支撑
-**数据**　……
-**亲历 · 案例**　……
-**反例 · 边界**　……
+## 认知张力
+- 惯性误区：（90%的人常犯的浅层做法或认知盲区；不超过 30 字）
+- 破局逻辑：（原文给出的核心反思与正确解法；不超过 30 字）
 
-# 一个最小行动
-（读者看完立刻能做、5-15分钟完成的具体一步；"建立知识体系"太虚，"今天把1条旧笔记按四问填完"才算）
+## 边界与约束
+- 适用：（在何种情境、对谁或满足什么前置条件时成立；不超过 30 字）
+- 反适用：（何种场景下会用错或失效；不超过 30 字）
 
-# 可复用形态
-**长文段落**　半句切入点
-**清单**　半句切入点
+## 硬核零件
+（1～2 条关键论据、数据或生动隐喻。每条一行结论 + 一行原文短引依据）
+- 论据：……
+  依据：「……」
 
-# 来源与可信度
-《来源笔记名或链接》 · 可信度：亲历|二手|待验证
+## 破题切口
+（一句极具冲突感与吸引力的破题金句或设问，可直接作为下一篇文章开头第一行；不超过 35 字）
 
-# 一句话自检
-- ✓/✗ 有亲手细节
-- ✓/✗ 换平台还能讲
-- ✓/✗ 现在能发或只差一点
+## 截图级金句
+（提炼原文中最具穿透力、最适合读者截图保存或加粗分享的一句话；没有则写「原文未提供」）`;
 
-# 金句 / 钩子
-> （一句可当标题或开场的话；没有就只写：无）
-
-要求：三个支撑至少覆盖数据/亲历案例/反例(边界)三类的两类；可复用形态列出 2-4 种并各写半句切入点；正文可用 **加粗**、列表、引用、代码块等 Markdown 语法自由排版；除这份文档本身外，不要输出任何解释性文字。`;
+export { parseCardFields } from "./card-md";
 
 /**
  * 读取卡片提取提示词：编辑部（custom_agents）中「卡片萃取师」工位的 system_prompt。
@@ -61,8 +54,12 @@ export const CARD_EXTRACT_DEFAULT_PROMPT = `你是一位极度克制、讲究实
  */
 function getCardSystemPrompt(db: ReturnType<typeof getDb>): string {
   db.prepare(
-    `INSERT OR IGNORE INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
-     VALUES (?, 'extract', ?, ?, ?, NULL, 0.4, 1)`
+    `INSERT INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
+     VALUES (?, 'extract', ?, ?, ?, NULL, 0.4, 1)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       persona = excluded.persona,
+       system_prompt = CASE WHEN custom_agents.is_preset = 1 THEN excluded.system_prompt ELSE custom_agents.system_prompt END`
   ).run(CARD_EXTRACT_AGENT_ID, CARD_EXTRACT_AGENT_NAME, CARD_EXTRACT_AGENT_PERSONA, CARD_EXTRACT_DEFAULT_PROMPT);
 
   const row = db
@@ -163,7 +160,7 @@ async function callLlmText(cfg: ByokConfig, system: string, prompt: string): Pro
   return text;
 }
 
-/** 未配置 AI 或调用失败时的兜底卡片（同样是一份 markdown 文档） */
+/** 未配置 AI 或调用失败时的兜底卡片（同样是一份 markdown 文档，结构与正式卡一致） */
 function generateFallbackCardMd(content: string): string {
   const firstLine =
     content
@@ -172,33 +169,24 @@ function generateFallbackCardMd(content: string): string {
       .find((l) => l.replace(/^#+\s*/, "").length > 10) || "一条待萃取的笔记";
   const plain = firstLine.replace(/^#+\s*/, "").replace(/^\s*[-*>]\s*/, "");
 
-  return `# 一句话观点
-> 「${plain.slice(0, 30)}」——真正的价值不在于记录，而在于能否被调用并化作可见的产出。
+  return `## 核心洞察
+${plain.slice(0, 35)}
 
-# 适用对象 + 场景
-常在知识库里囤积素材、关键时刻却调用不出来的人。
+## 认知张力
+- 惯性误区：浅层收藏或仅记事实
+- 破局逻辑：提炼底层论点并以输出倒逼输入
 
-# 三个支撑
-**数据**　文中给出的核心观点与案例，可作为后续写作用的证据点待验证。
-**亲历 · 案例**　这条笔记本身即一次亲历的知识管理实践记录。
-**反例 · 边界**　若不主动加工与再表达，收藏只会沦为数字仓鼠症的错误等价物。
+## 边界与约束
+- 适用：通用知识沉淀与二次创作
+- 反适用：未提供限定条件时不可盲目推广
 
-# 一个最小行动
-今天挑出这一条笔记，按一句话观点 + 适用场景重新表述，并写出一个最小行动。
+## 硬核零件
+- 论据：${plain.slice(0, 25)}
+  依据：「${plain.slice(0, 30)}」
 
-# 可复用形态
-**长文段落**　作为文章开头反直觉观点的引子
-**清单**　提炼成 3 条的「别再这样整理」避坑清单
-**口播**　作为短视频开场的钩子句
+## 破题切口
+如何将「${plain.slice(0, 20)}」转化为高密度的认知产出？
 
-# 来源与可信度
-《${plain.slice(0, 40) || "当前笔记"}》 · 可信度：待验证
-
-# 一句话自检
-- ✗ 有亲手细节
-- ✗ 换平台还能讲
-- ✗ 现在能发或只差一点
-
-# 金句 / 钩子
-> 知识管理的目标不是记住，而是把原料锻造成作品。`;
+## 截图级金句
+「${plain.slice(0, 50)}」`;
 }

@@ -1,21 +1,29 @@
 "use client";
 
-import { Check, Copy, Feather, FolderPlus, Loader2, PenLine, ScanSearch } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Copy, Feather, FileSearch, FolderPlus, Loader2, LockKeyhole, PenLine, ScanSearch } from "lucide-react";
+import { useState } from "react";
 import { InkCraftMark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { PipelineProject, PipelineStage } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-export const WIZARD_STAGES: { key: PipelineStage; step: string; name: string; icon: typeof Feather }[] = [
-  { key: "ideate", step: "01", name: "构思", icon: Feather },
-  { key: "draft", step: "02", name: "起草", icon: PenLine },
-  { key: "review", step: "03", name: "编审 · 分发", icon: ScanSearch },
+const ALL_STAGES: { key: PipelineStage; name: string; icon: typeof Feather }[] = [
+  { key: "ideate", name: "选题", icon: Feather },
+  { key: "topic", name: "锁题", icon: LockKeyhole },
+  { key: "gather", name: "取证", icon: FileSearch },
+  { key: "draft", name: "起草", icon: PenLine },
+  { key: "review", name: "核稿 · 分发", icon: ScanSearch },
 ];
 
-export function stageIndexOf(stage: PipelineStage): number {
-  if (stage === "completed") return WIZARD_STAGES.length - 1;
-  const idx = WIZARD_STAGES.findIndex((s) => s.key === stage);
+/** 卡片模式跳过选题，从锁题进入 */
+export function stagesFor(project: PipelineProject) {
+  const stages = project.cardId ? ALL_STAGES.filter((s) => s.key !== "ideate") : ALL_STAGES;
+  return stages.map((s, idx) => ({ ...s, step: String(idx + 1).padStart(2, "0") }));
+}
+
+export function stageIndexOf(stage: PipelineStage, project: PipelineProject): number {
+  if (stage === "completed") return stagesFor(project).length - 1;
+  const idx = stagesFor(project).findIndex((s) => s.key === stage);
   return idx < 0 ? 0 : idx;
 }
 
@@ -31,7 +39,7 @@ interface WizardProgressProps {
   onNewProject: () => void;
 }
 
-/** 工坊向导顶部：品牌、可编辑标题、三工步进度条与全局动作 */
+/** 工坊向导顶部：品牌、可编辑标题、工步进度条与全局动作 */
 export function WizardProgress({
   project,
   saving,
@@ -44,12 +52,17 @@ export function WizardProgress({
   onNewProject,
 }: WizardProgressProps) {
   const [titleDraft, setTitleDraft] = useState(project.title);
+  const [syncKey, setSyncKey] = useState(`${project.id}:${project.title}`);
 
-  useEffect(() => {
+  // 换项目或外部标题变更时同步输入草稿（渲染期同步，避免 effect 里 setState）
+  const nextSyncKey = `${project.id}:${project.title}`;
+  if (syncKey !== nextSyncKey) {
+    setSyncKey(nextSyncKey);
     setTitleDraft(project.title);
-  }, [project.id, project.title]);
+  }
 
-  const currentIndex = stageIndexOf(project.currentStage);
+  const stages = stagesFor(project);
+  const currentIndex = stageIndexOf(project.currentStage, project);
   const completed = project.currentStage === "completed";
 
   return (
@@ -109,9 +122,9 @@ export function WizardProgress({
         </div>
       </div>
 
-      {/* 次行：三工步进度条 */}
+      {/* 次行：工步进度条（卡片模式自动隐藏选题步） */}
       <div className="flex items-center justify-center gap-0 px-6 pb-3">
-        {WIZARD_STAGES.map((s, idx) => {
+        {stages.map((s, idx) => {
           const isCurrent = !completed && idx === currentIndex;
           const isDone = completed || idx < currentIndex;
           const unlocked = idx <= currentIndex;

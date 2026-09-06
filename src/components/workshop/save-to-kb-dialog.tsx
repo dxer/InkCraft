@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink, Folder, FolderPlus, Layers, Loader2, Sparkles } from "lucide-react";
+import { Check, ExternalLink, Folder, FolderPlus, Layers, Loader2, Plus, Sparkles, Tag, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,22 @@ const PLATFORM_NAMES: Record<string, string> = {
   x_thread: "X Thread 版",
 };
 
+/** 从 Markdown 内容中提取真实标题（优先匹配首个大标题 # 标题，若无则提取首行） */
+function extractTitleFromContent(content: string, fallback: string): string {
+  if (!content || !content.trim()) return fallback;
+  const match = content.match(/^#+\s+(.+)$/m);
+  if (match && match[1]) {
+    const clean = match[1].replace(/[*_`~#]/g, "").trim();
+    if (clean) return clean;
+  }
+  const firstLine = content.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+  if (firstLine) {
+    const clean = firstLine.replace(/^[#>*_\-\s]+/, "").trim();
+    if (clean) return clean.slice(0, 60);
+  }
+  return fallback;
+}
+
 export function SaveToKbDialog({
   open,
   onOpenChange,
@@ -45,8 +61,8 @@ export function SaveToKbDialog({
   const [selectedKbId, setSelectedKbId] = useState<string>("default");
   const [selectedVersion, setSelectedVersion] = useState<string>(initialPlatform);
   const [title, setTitle] = useState<string>("");
-  const [category, setCategory] = useState<string>("创作成果");
-  const [tags, setTags] = useState<string>("原创, 成稿");
+  const [tagList, setTagList] = useState<string[]>(["原创", "成稿"]);
+  const [inputTag, setInputTag] = useState<string>("");
   const [loadingKbs, setLoadingKbs] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<{ id: string; kbId: string } | null>(null);
@@ -72,6 +88,13 @@ export function SaveToKbDialog({
     });
   }
 
+  // 得到指定版本的内容
+  function getContentForVersion(verKey: string): string {
+    if (verKey === "bundle") return masterContent;
+    if (verKey === "master") return masterContent;
+    return variants[verKey] || masterContent;
+  }
+
   useEffect(() => {
     if (!open) {
       setSavedNote(null);
@@ -79,11 +102,18 @@ export function SaveToKbDialog({
     }
 
     setSelectedVersion(initialPlatform);
-    setCategory("创作成果");
 
-    // 默认标题
-    const platName = initialPlatform !== "master" ? ` · ${PLATFORM_NAMES[initialPlatform] || ""}` : "";
-    setTitle(`${defaultTitle || "未命名作品"}${platName}`);
+    // 默认标题：从对应版本的实际 Markdown 内容中提取真实大标题
+    const currentContent = getContentForVersion(initialPlatform);
+    const resolved = extractTitleFromContent(currentContent, defaultTitle || "未命名作品");
+    setTitle(resolved);
+
+    // 默认标签
+    const baseTags = ["原创", "成稿"];
+    if (initialPlatform !== "master" && initialPlatform !== "bundle" && PLATFORM_NAMES[initialPlatform]) {
+      baseTags.push(PLATFORM_NAMES[initialPlatform].replace("版", ""));
+    }
+    setTagList(Array.from(new Set(baseTags)));
 
     // 拉取知识库列表
     setLoadingKbs(true);
@@ -97,24 +127,34 @@ export function SaveToKbDialog({
         }
       })
       .finally(() => setLoadingKbs(false));
-  }, [open, defaultTitle, initialPlatform]);
+  }, [open, defaultTitle, initialPlatform, masterContent, variants]);
 
   // 切换版本时更新默认标题与标签
   function handleVersionChange(verKey: string) {
     setSelectedVersion(verKey);
-    const suffix =
-      verKey === "master"
-        ? ""
-        : verKey === "bundle"
-        ? " · 全平台合辑"
-        : ` · ${PLATFORM_NAMES[verKey] || ""}`;
-    setTitle(`${defaultTitle || "未命名作品"}${suffix}`);
+    const verContent = getContentForVersion(verKey);
+    const fallback = defaultTitle || "未命名作品";
+    const resolved = extractTitleFromContent(verContent, fallback);
+    setTitle(resolved);
 
     const baseTags = ["原创", "成稿"];
     if (verKey !== "master" && verKey !== "bundle" && PLATFORM_NAMES[verKey]) {
       baseTags.push(PLATFORM_NAMES[verKey].replace("版", ""));
     }
-    setTags(baseTags.join(", "));
+    setTagList(Array.from(new Set(baseTags)));
+  }
+
+  // 标签增删管理
+  function addTag(raw?: string) {
+    const val = (raw ?? inputTag).trim().replace(/^#/, "");
+    if (val && !tagList.includes(val)) {
+      setTagList([...tagList, val]);
+    }
+    setInputTag("");
+  }
+
+  function removeTag(tagToRemove: string) {
+    setTagList(tagList.filter((t) => t !== tagToRemove));
   }
 
   // 计算最终保存的正文内容
@@ -138,11 +178,6 @@ export function SaveToKbDialog({
 
     setSaving(true);
     try {
-      const parsedTags = tags
-        .split(/[,，\s]+/)
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       const res = await fetch("/api/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,8 +185,8 @@ export function SaveToKbDialog({
           kbId: selectedKbId,
           title: title.trim() || defaultTitle || "未命名作品",
           content: finalContent,
-          category: category.trim() || "创作成果",
-          tags: parsedTags,
+          category: "创作成果",
+          tags: tagList,
         }),
       });
 
@@ -294,7 +329,7 @@ export function SaveToKbDialog({
               )}
             </div>
 
-            {/* 笔记标题 */}
+            {/* 笔记标题（自动提取正文中的大标题） */}
             <div className="space-y-1.5">
               <label className="font-medium text-muted-foreground">笔记标题：</label>
               <Input
@@ -305,25 +340,57 @@ export function SaveToKbDialog({
               />
             </div>
 
-            {/* 分类与标签 */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <label className="font-medium text-muted-foreground">分类：</label>
-                <Input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="如：创作成果、原创长文"
-                  className="text-xs h-8"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="font-medium text-muted-foreground">标签（逗号分隔）：</label>
-                <Input
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  placeholder="原创, 成稿, 公众号"
-                  className="text-xs h-8"
-                />
+            {/* 标签管理（Pill 形式，按回车或逗号添加，无智能标签） */}
+            <div className="space-y-1.5">
+              <label className="font-medium text-muted-foreground flex items-center gap-1">
+                <Tag className="size-3" />
+                <span>标签管理：</span>
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background/60 p-2 min-h-10">
+                {tagList.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-foreground font-medium"
+                  >
+                    <span>{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                  <input
+                    type="text"
+                    value={inputTag}
+                    onChange={(e) => setInputTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "," || e.key === "，") {
+                        e.preventDefault();
+                        addTag();
+                      }
+                    }}
+                    onBlur={() => {
+                      if (inputTag.trim()) addTag();
+                    }}
+                    placeholder="输入标签按回车添加..."
+                    className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                  />
+                  {inputTag.trim() && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => addTag()}
+                      className="size-5 rounded text-primary hover:bg-primary/10 shrink-0"
+                    >
+                      <Plus className="size-3" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 

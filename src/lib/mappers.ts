@@ -31,13 +31,14 @@ export interface DocumentRow {
 
 export interface AgentRow {
   id: string;
-  stage: "topic" | "evidence" | "draft" | "review";
+  stage: string;
   name: string;
   persona: string | null;
   system_prompt: string;
   model: string | null;
   temperature: number;
   is_preset: number;
+  enabled?: number | null;
 }
 
 export interface KbRow {
@@ -113,5 +114,6 @@ export function mapAgent(row: AgentRow): AgentItem {
     model: row.model,
     temperature: row.temperature,
     isPreset: row.is_preset === 1,
+    enabled: row.enabled === undefined || row.enabled === null || row.enabled === 1,
   };
 }

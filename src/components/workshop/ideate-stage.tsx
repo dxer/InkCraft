@@ -165,7 +165,7 @@ export function IdeateStage({ project, onProjectUpdate }: IdeateStageProps) {
     fetchChecklist(topics[idx]);
   }
 
-  // 锁定选题与素材，进入起草工位
+  // 锁定命题，进入锁题工位（四行题旨定调后再取证、起草）
   async function confirmIdeation(topic: TopicLike, ids: string[]) {
     if (confirming) return;
     setConfirming(true);
@@ -176,7 +176,7 @@ export function IdeateStage({ project, onProjectUpdate }: IdeateStageProps) {
         body: JSON.stringify({
           title: topic.title,
           selectedTopic: topic,
-          currentStage: "draft",
+          currentStage: "topic",
           clearMaterialSource: "evidence",
           addMaterials: ids,
           materialSource: "evidence",
@@ -184,10 +184,10 @@ export function IdeateStage({ project, onProjectUpdate }: IdeateStageProps) {
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      toast("选题与素材已锁定，进入起草", "success");
+      toast("命题已锁定，进入锁题", "success");
       onProjectUpdate(data.project);
     } catch {
-      toast("锁定选题失败，请稍后重试", "error");
+      toast("锁定命题失败，请稍后重试", "error");
     } finally {
       setConfirming(false);
     }
@@ -363,7 +363,7 @@ export function IdeateStage({ project, onProjectUpdate }: IdeateStageProps) {
               ) : (
                 <Check className="size-4" />
               )}
-              锁定选题与素材，进入起草
+              锁定命题，进入锁题
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -525,7 +525,7 @@ export function IdeateStage({ project, onProjectUpdate }: IdeateStageProps) {
                               ) : (
                                 <Check className="size-3.5" />
                               )}
-                              锁定选题与素材，进入起草
+                              锁定命题，进入锁题
                               <ArrowRight className="size-3.5" />
                             </Button>
                           </div>

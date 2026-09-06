@@ -1,68 +1,123 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
-import { getAgentForStage } from "@/lib/pipeline";
+import { getAgentForStage, getProjectById } from "@/lib/pipeline";
 import { getByok } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
+export interface ChecklistItem {
+  key: "claim" | "facts" | "avoid" | "cadence";
+  label: string;
+  pass: boolean;
+  note: string;
+}
+
 export interface ReviewReport {
   score: number;
   verdict: string;
-  logicIssues: { issue: string; suggestion: string }[];
-  densityNotes: { finding: string; suggestion: string }[];
-  factChecks: { statement: string; credibility: "high" | "medium" | "unverified"; note: string }[];
+  /** 机械校验：母稿中无法指回素材包的数字清单 */
+  untraceable: string[];
+  checklist: ChecklistItem[];
   overallSummary: string;
+}
+
+const LABELS: Record<ChecklistItem["key"], string> = {
+  claim: "主张是否被写大",
+  facts: "关键事实能否指回素材",
+  avoid: "「不写什么」是否被遵守",
+  cadence: "是否卡片腔",
+};
+
+/** 机械先行：抽取母稿中的数字，逐一核对能否在素材包中找到 */
+function mechanicalNumberCheck(
+  content: string,
+  sourceTexts: string[]
+): string[] {
+  if (sourceTexts.length === 0) return [];
+  const sentences = content.split(/(?<=[。！？!?；;])/).map((s) => s.trim());
+  const numbers = Array.from(new Set(content.match(/\d+(?:\.\d+)?%?/g) || []));
+  const untraceable: string[] = [];
+  for (const n of numbers) {
+    if (n === "0" || /^(19|20)\d{2}$/.test(n)) continue; // 常识数字/年份放行
+    const traceable =
+      sourceTexts.some((t) => t.includes(n)) ||
+      /\[S\d+\]/.test(content.split(n)[0].slice(-80));
+    if (!traceable) {
+      const where = sentences.find((s) => s.includes(n)) || n;
+      untraceable.push(where.length > 60 ? `${where.slice(0, 60)}…（含 ${n}）` : where);
+    }
+  }
+  return untraceable.slice(0, 8);
 }
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
+  const projectId = typeof body?.projectId === "string" ? body.projectId : "";
   const content = typeof body?.content === "string" ? body.content.trim() : "";
 
   if (!content) {
     return NextResponse.json({ error: "母稿内容不能为空" }, { status: 400 });
   }
 
+  const project = projectId ? getProjectById(projectId) : null;
   const agent = getAgentForStage("review");
   const cfg = getByok();
 
-  if (!cfg) {
-    const mockReport: ReviewReport = {
-      score: 88,
-      verdict: "出版级达标 · 论据充实，逻辑严密",
-      logicIssues: [
-        {
-          issue: "第二章节转入第三章节时缺少一句承上启下的过渡连接",
-          suggestion: "建议在‘流水线四步法’末尾增加一句说明人机分工如何支撑流水线的落地。",
-        },
-      ],
-      densityNotes: [
-        {
-          finding: "首段前两句存在部分铺垫修辞",
-          suggestion: "可直接删除‘在传统的知识管理体系中’等套话，开门见山提出核心命题。",
-        },
-      ],
-      factChecks: [
-        {
-          statement: "流水线四步法包括：选题、素材、起草、编审",
-          credibility: "high",
-          note: "与工坊定义完全吻合",
-        },
-        {
-          statement: "高密度初稿字数区间在 1500~3000 字",
-          credibility: "high",
-          note: "出版标准长文字数基线",
-        },
-        {
-          statement: "存下来的每一条笔记如果不进入后续装配就是死数据",
-          credibility: "medium",
-          note: "属观点性断言，论述自洽但可补充具体案例",
-        },
-      ],
-      overallSummary:
-        "整篇母稿结构非常紧凑，四步装配流的核心论据充分展开。建议根据上述编审意见在右侧画布微调后直接进入分发转译。",
+  // 素材包文本：机械校验与核稿依据
+  const sourceTexts: string[] = (project?.chunkSelection || []).map(
+    (c) => `${c.packedText || ""} ${c.text}`
+  );
+  const claimText =
+    project?.claimSnapshot?.claim || project?.brief?.acceptance || "";
+  const avoidText = project?.brief?.avoid || "";
+  const untraceable = mechanicalNumberCheck(content, sourceTexts);
+
+  const buildReport = (llm: Partial<{
+    score: number;
+    verdict: string;
+    checklist: { key: string; pass: boolean; note: string }[];
+    overallSummary: string;
+  }> | null): ReviewReport => {
+    const items: ChecklistItem[] = (["claim", "facts", "avoid", "cadence"] as const).map(
+      (key) => {
+        const found = llm?.checklist?.find((c) => c.key === key);
+        return {
+          key,
+          label: LABELS[key],
+          pass: key === "facts" && untraceable.length > 0 ? false : (found?.pass ?? true),
+          note: found?.note || "",
+        };
+      }
+    );
+    const allPass = items.every((i) => i.pass);
+    // 分数由清单推导（每项 25 分），不采信模型自报；0 项挂 = 100
+    const fails = items.filter((i) => !i.pass).length;
+    const score = typeof llm?.score === "number" && llm.score > 0 ? llm.score : 100 - fails * 25;
+    return {
+      score,
+      verdict: llm?.verdict || (allPass ? "核稿通过" : "存在未通过项"),
+      untraceable,
+      checklist: items,
+      overallSummary: llm?.overallSummary || "",
     };
-    return NextResponse.json({ report: mockReport, isMock: true });
+  };
+
+  if (!cfg) {
+    return NextResponse.json({
+      report: buildReport({
+        score: 88,
+        verdict: "演示核稿通过",
+        checklist: [
+          { key: "claim", pass: true, note: "演示数据：主张未被写大" },
+          { key: "facts", pass: untraceable.length === 0, note: untraceable.length > 0 ? `有 ${untraceable.length} 处数字未溯源` : "演示数据：事实均可指回素材" },
+          { key: "avoid", pass: true, note: "演示数据：未触碰禁区" },
+          { key: "cadence", pass: true, note: "演示数据：无卡片腔" },
+        ],
+        overallSummary: "未配置模型，当前为演示核稿结果。",
+      }),
+      isMock: true,
+    });
   }
 
   try {
@@ -73,29 +128,34 @@ export async function POST(request: Request) {
     });
 
     const userPrompt = [
-      `【成稿母稿内容】：\n${content}`,
-      "\n请以出版级总编标准执行全流程审校，只输出一个 JSON 格式对象，不要包含多余文字：",
+      claimText ? `【主张/题旨基准】：${claimText}` : "",
+      avoidText ? `【不写什么】：${avoidText}` : "",
+      sourceTexts.length > 0
+        ? `【素材包内容（事实唯一来源）】：\n${sourceTexts.map((t, i) => `[S${i + 1}] ${t.slice(0, 400)}`).join("\n")}`
+        : "",
+      `【机械校验：以下数字在素材中未找到出处，请逐条核实并定位】：\n${untraceable.length > 0 ? untraceable.join("\n") : "无"}`,
+      `【成文母稿】：\n${content.slice(0, 12000)}`,
+      "\n执行四项核稿，只输出一个 JSON 对象，不要多余文字：",
       `{
-        "score": 85, // 0-100 总分
-        "verdict": "简要总体评语（10字以内）",
-        "logicIssues": [
-          { "issue": "发现的逻辑断层或矛盾", "suggestion": "修改建议" }
+        "score": 0,
+        "verdict": "10字内总评",
+        "checklist": [
+          { "key": "claim", "pass": true, "note": "一句话定位：哪段写大了/为何通过" },
+          { "key": "facts", "pass": true, "note": "结合机械校验结果定位问题句" },
+          { "key": "avoid", "pass": true, "note": "违规处定位/为何通过" },
+          { "key": "cadence", "pass": true, "note": "模板腔定位/为何通过" }
         ],
-        "densityNotes": [
-          { "finding": "废话或信息密度不足之处", "suggestion": "精简建议" }
-        ],
-        "factChecks": [
-          { "statement": "文中的关键事实/数据/论断", "credibility": "high/medium/unverified", "note": "核查说明" }
-        ],
-        "overallSummary": "综合审校报告总结（100字左右）"
+        "overallSummary": "50字内总结"
       }`,
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
 
     const { text } = await generateText({
       model: provider.chatModel(agent?.model || cfg.model),
-      system: agent?.system_prompt || "你是严苛的总编，审查母稿逻辑、信息密度与事实数据可信度。",
+      system:
+        agent?.system_prompt ||
+        "你是严苛的核稿总编。主张是否被写大、事实能否指回素材、禁区是否被遵守、是否卡片腔，一项不过即不通过。",
       prompt: userPrompt,
-      temperature: agent?.temperature || 0.4,
+      temperature: agent?.temperature ?? 0.2,
       maxRetries: 1,
       abortSignal: AbortSignal.timeout(90_000),
     });
@@ -104,12 +164,12 @@ export async function POST(request: Request) {
     const end = text.lastIndexOf("}");
     if (start !== -1 && end > start) {
       const parsed = JSON.parse(text.slice(start, end + 1));
-      return NextResponse.json({ report: parsed, isMock: false });
+      return NextResponse.json({ report: buildReport(parsed), isMock: false });
     }
 
-    return NextResponse.json({ error: "未能解析审校报告" }, { status: 502 });
+    return NextResponse.json({ error: "未能解析核稿结果" }, { status: 502 });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "编审审查失败";
+    const msg = err instanceof Error ? err.message : "核稿失败";
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

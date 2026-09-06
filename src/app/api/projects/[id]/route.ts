@@ -4,6 +4,7 @@ import {
   clearMaterialsBySource,
   getProjectById,
   removeMaterialFromProject,
+  setProjectChunks,
   updateProject,
 } from "@/lib/pipeline";
 import { normalizePipelineStage } from "@/lib/types";
@@ -31,8 +32,13 @@ export async function PATCH(request: Request, { params }: Params) {
   const project = updateProject(id, {
     title: typeof body.title === "string" ? body.title : undefined,
     currentStage: typeof body.currentStage === "string" ? normalizePipelineStage(body.currentStage) : undefined,
+    targetSkill: typeof body.targetSkill === "string" ? body.targetSkill : undefined,
+    topicId: typeof body.topicId === "string" ? body.topicId : undefined,
     selectedTopic: body.selectedTopic !== undefined ? JSON.stringify(body.selectedTopic) : undefined,
     masterContent: typeof body.masterContent === "string" ? body.masterContent : undefined,
+    brief: body.brief !== undefined ? JSON.stringify(body.brief) : undefined,
+    claimSnapshot: body.claimSnapshot !== undefined ? JSON.stringify(body.claimSnapshot) : undefined,
+    snapshots: body.snapshots !== undefined ? JSON.stringify(body.snapshots) : undefined,
   });
 
   if (!project) {
@@ -47,6 +53,19 @@ export async function PATCH(request: Request, { params }: Params) {
   // 附加素材
   if (Array.isArray(body.addMaterials) && body.addMaterials.length > 0) {
     attachMaterialsToProject(id, body.addMaterials, body.materialSource || "manual");
+  }
+
+  // 覆盖式保存取证勾选切片（上限 8 条）
+  if (Array.isArray(body.setChunks)) {
+    setProjectChunks(
+      id,
+      body.setChunks
+        .filter((c: unknown) => c && typeof (c as { chunkId: unknown }).chunkId === "string")
+        .map((c: { chunkId: string; packedText?: string }) => ({
+          chunkId: c.chunkId,
+          packedText: typeof c.packedText === "string" ? c.packedText : null,
+        }))
+    );
   }
 
   // 移除素材

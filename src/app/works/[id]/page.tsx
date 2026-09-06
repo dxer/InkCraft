@@ -4,15 +4,18 @@ import {
   ArrowLeft,
   Bookmark,
   Check,
+  Compass,
   Copy,
   Download,
   ExternalLink,
   FileText,
   FolderPlus,
   HelpCircle,
+  Lightbulb,
   Loader2,
   MessageSquare,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -20,13 +23,24 @@ import { useEffect, useMemo, useState } from "react";
 import { marked } from "marked";
 import { StageBadge, platformTint } from "@/components/badges";
 import { Button } from "@/components/ui/button";
+import { AiCoverDialog } from "@/components/workshop/ai-cover-dialog";
+import { QuoteCardDialog } from "@/components/workshop/quote-card-dialog";
 import { SaveToKbDialog } from "@/components/workshop/save-to-kb-dialog";
+import { copyWeChatRichText } from "@/lib/wechat-format";
 import { cn } from "@/lib/utils";
 
 interface WorkDetail {
   id: string;
   title: string;
   currentStage: string;
+  targetSkill?: string | null;
+  topicId?: string | null;
+  selectedTopic?: {
+    title: string;
+    angle?: string;
+    hook?: string;
+    outline?: string[];
+  } | null;
   masterContent: string;
   updatedAt: string;
   variants: Record<string, { name: string; content: string }>;
@@ -51,6 +65,8 @@ export default function WorkDetailPage() {
   const [copied, setCopied] = useState(false);
   const [wechatCopied, setWechatCopied] = useState(false);
   const [saveToKbOpen, setSaveToKbOpen] = useState(false);
+  const [quoteCardOpen, setQuoteCardOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
 
   useEffect(() => {
     if (!workId) return;
@@ -92,22 +108,12 @@ export default function WorkDetailPage() {
   // 复制微信富文本
   async function handleCopyWeChat() {
     if (!currentText) return;
-    const htmlWithStyles = formatToWeChatHtml(currentText);
-    try {
-      const blobHtml = new Blob([htmlWithStyles], { type: "text/html" });
-      const blobPlain = new Blob([currentText], { type: "text/plain" });
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/html": blobHtml,
-          "text/plain": blobPlain,
-        }),
-      ]);
+    const ok = await copyWeChatRichText(currentText, { theme: "emerald", title: work?.title });
+    if (ok) {
       setWechatCopied(true);
       setTimeout(() => setWechatCopied(false), 2000);
-    } catch {
-      navigator.clipboard.writeText(currentText);
-      setWechatCopied(true);
-      setTimeout(() => setWechatCopied(false), 2000);
+    } else {
+      handleCopyText();
     }
   }
 
@@ -160,7 +166,7 @@ export default function WorkDetailPage() {
             size="sm"
             variant="outline"
             asChild
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs"
+            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer"
           >
             <Link href={`/workshop?projectId=${encodeURIComponent(workId)}`}>
               <ExternalLink className="size-3.5" />
@@ -171,33 +177,43 @@ export default function WorkDetailPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => setQuoteCardOpen(true)}
+            disabled={!currentText.trim()}
+            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10 cursor-pointer"
+          >
+            <Sparkles className="size-3.5" />
+            金句图卡
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => setSaveToKbOpen(true)}
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs"
+            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer"
           >
             <FolderPlus className="size-3.5 text-primary" />
             沉淀至知识库
           </Button>
 
-          {activeTab === "wechat" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCopyWeChat}
-              className="h-8 gap-1 text-xs"
-            >
-              {wechatCopied ? (
-                <Check className="size-3 text-emerald-600" />
-              ) : (
-                <Copy className="size-3" />
-              )}
-              {wechatCopied ? "微信排版已复制" : "一键复制微信排版"}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCopyWeChat}
+            disabled={!currentText.trim()}
+            className="h-8 gap-1 text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer"
+          >
+            {wechatCopied ? (
+              <Check className="size-3 text-emerald-600" />
+            ) : (
+              <MessageSquare className="size-3" />
+            )}
+            {wechatCopied ? "微信排版已复制" : "公众号排版"}
+          </Button>
 
           <Button
             size="sm"
             onClick={handleCopyText}
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs bg-foreground text-background hover:bg-foreground/90"
+            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs bg-foreground text-background hover:bg-foreground/90 cursor-pointer"
           >
             {copied ? (
               <Check className="size-3 text-emerald-500" />
@@ -279,6 +295,40 @@ export default function WorkDetailPage() {
           </div>
         )}
 
+        {/* 关联选题回溯卡 */}
+        {work.selectedTopic && (
+          <div className="flex items-start justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <span className="flex size-6 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <Lightbulb className="size-3.5" />
+              </span>
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">源自选题：{work.selectedTopic.title}</span>
+                </div>
+                {work.selectedTopic.angle && (
+                  <p className="text-muted-foreground leading-relaxed">
+                    <span className="font-medium text-foreground">核心切角：</span>
+                    {work.selectedTopic.angle}
+                  </p>
+                )}
+                {work.selectedTopic.hook && (
+                  <p className="text-amber-700 dark:text-amber-300 font-medium">
+                    <span className="opacity-75">前三秒钩子：</span>
+                    “{work.selectedTopic.hook}”
+                  </p>
+                )}
+              </div>
+            </div>
+            <Link
+              href="/topics"
+              className="text-[11px] text-amber-600 dark:text-amber-400 font-medium hover:underline shrink-0 ml-3"
+            >
+              前往选题库 →
+            </Link>
+          </div>
+        )}
+
         {/* 成稿正文 Markdown 阅读渲染区 */}
         <div className="py-2">
           {currentText.trim() ? (
@@ -304,6 +354,30 @@ export default function WorkDetailPage() {
           Object.entries(work.variants).map(([k, v]) => [k, v.content]),
         )}
         initialPlatform={activeTab}
+      />
+
+      {/* 小红书/社交媒体金句图卡对话框 */}
+      <QuoteCardDialog
+        open={quoteCardOpen}
+        onOpenChange={setQuoteCardOpen}
+        initialQuote={
+          currentText
+            ? currentText.replace(/^[#>*_\-\s]+/gm, "").slice(0, 150)
+            : work.selectedTopic?.hook || ""
+        }
+        sourceTitle={work.title}
+        topicTitle={work.selectedTopic?.title || ""}
+      />
+
+      {/* AI 动态生成微信公众号 SVG 封面对话框 */}
+      <AiCoverDialog
+        open={coverOpen}
+        onOpenChange={setCoverOpen}
+        title={work.title}
+        angle={work.selectedTopic?.angle || ""}
+        hook={work.selectedTopic?.hook || ""}
+        summary={currentText.slice(0, 200)}
+        category="深度思考"
       />
     </div>
   );

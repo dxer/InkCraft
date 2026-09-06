@@ -10,20 +10,22 @@ export function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // 放行静态资源、登录页与认证接口
+  // 放行静态资源、登录页、认证接口及本地周期增量挖掘任务
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname === "/login" ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/extension")
+    pathname.startsWith("/api/extension") ||
+    (pathname === "/api/topics/mine" && (request.headers.get("host")?.startsWith("localhost") || request.headers.get("host")?.startsWith("127.0.0.1")))
   ) {
     return NextResponse.next();
   }
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const expectedToken = generateSessionToken(password);
-  const isAuthenticated = token === expectedToken;
+  const authHeader = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const isAuthenticated = token === expectedToken || authHeader === password;
 
   if (!isAuthenticated) {
     if (pathname.startsWith("/api/")) {

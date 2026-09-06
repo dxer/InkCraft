@@ -6,6 +6,7 @@ import {
   IdCard,
   Brain,
   Library,
+  Lightbulb,
   Menu,
   Search,
   Settings,
@@ -40,6 +41,7 @@ const SECTIONS = [
     title: "创作",
     items: [
       { href: "/cards", label: "卡片", icon: IdCard },
+      { href: "/topics", label: "选题", icon: Lightbulb },
       { href: "/memory", label: "记忆", icon: Brain },
       { href: "/works", label: "成果", icon: Library },
     ],

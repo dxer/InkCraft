@@ -9,8 +9,14 @@ export interface ProjectRow {
   id: string;
   title: string;
   current_stage: string;
+  target_skill: string | null;
+  topic_id?: string | null;
   selected_topic: string | null;
   master_content: string | null;
+  card_id: string | null;
+  claim_snapshot: string | null;
+  brief: string | null;
+  snapshots?: string | null;
   updated_at: string;
 }
 
@@ -44,8 +50,14 @@ export function updateProject(
   updates: {
     title?: string;
     currentStage?: PipelineStage;
+    targetSkill?: string | null;
+    topicId?: string | null;
     selectedTopic?: string | null;
     masterContent?: string | null;
+    cardId?: string | null;
+    claimSnapshot?: string | null;
+    brief?: string | null;
+    snapshots?: string | null;
   }
 ): PipelineProject | null {
   const db = getDb();
@@ -60,6 +72,14 @@ export function updateProject(
     sets.push("current_stage = ?");
     values.push(updates.currentStage);
   }
+  if (updates.targetSkill !== undefined) {
+    sets.push("target_skill = ?");
+    values.push(updates.targetSkill);
+  }
+  if (updates.topicId !== undefined) {
+    sets.push("topic_id = ?");
+    values.push(updates.topicId);
+  }
   if (updates.selectedTopic !== undefined) {
     sets.push("selected_topic = ?");
     values.push(updates.selectedTopic);
@@ -68,8 +88,37 @@ export function updateProject(
     sets.push("master_content = ?");
     values.push(updates.masterContent);
   }
+  if (updates.cardId !== undefined) {
+    sets.push("card_id = ?");
+    values.push(updates.cardId);
+  }
+  if (updates.claimSnapshot !== undefined) {
+    sets.push("claim_snapshot = ?");
+    values.push(updates.claimSnapshot);
+  }
+  if (updates.brief !== undefined) {
+    sets.push("brief = ?");
+    values.push(updates.brief);
+  }
+  if (updates.snapshots !== undefined) {
+    sets.push("snapshots = ?");
+    values.push(updates.snapshots);
+  }
 
   db.prepare(`UPDATE pipeline_projects SET ${sets.join(", ")} WHERE id = ?`).run(...values, id);
+
+  // 若阶段标记为完成，且关联了选题 ID，自动闭环更新选题库状态为 'used'
+  if (updates.currentStage === "completed" || (updates.masterContent && updates.masterContent.trim().length >= 50)) {
+    const proj = db.prepare("SELECT topic_id, title FROM pipeline_projects WHERE id = ?").get(id) as { topic_id: string | null; title: string } | undefined;
+    if (proj?.topic_id) {
+      try {
+        db.prepare(
+          "UPDATE topic_repository SET status = 'used', used_project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        ).run(id, proj.topic_id);
+      } catch {}
+    }
+  }
+
   return getProjectById(id);
 }
 
@@ -102,9 +151,39 @@ export function clearMaterialsBySource(projectId: string, source: "manual" | "ev
   db.prepare("DELETE FROM project_materials WHERE project_id = ? AND source = ?").run(projectId, source);
 }
 
-export function getAgentForStage(stage: "topic" | "evidence" | "draft" | "review"): AgentRow | null {
+export function getAgentForStage(stage: string): AgentRow | null {
   const db = getDb();
   return (db.prepare("SELECT * FROM custom_agents WHERE stage = ? LIMIT 1").get(stage) as AgentRow) || null;
+}
+
+/** 覆盖式保存项目勾选的取证切片（上限 8 条，超出截断） */
+export function setProjectChunks(
+  projectId: string,
+  items: { chunkId: string; packedText?: string | null }[]
+): void {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO project_chunks (id, project_id, chunk_id, packed_text)
+     SELECT ?, ?, ?, ?
+     WHERE EXISTS (SELECT 1 FROM knowledge_items WHERE id = ?)
+     ON CONFLICT(project_id, chunk_id) DO UPDATE SET packed_text = excluded.packed_text`
+  );
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM project_chunks WHERE project_id = ?").run(projectId);
+    for (const it of items.slice(0, 8)) {
+      insert.run(randomUUID(), projectId, it.chunkId, it.packedText ?? null, it.chunkId);
+    }
+  });
+  tx();
+}
+
+export function getProjectChunks(projectId: string): { chunkId: string; packedText: string | null }[] {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT chunk_id AS chunkId, packed_text AS packedText FROM project_chunks WHERE project_id = ? ORDER BY added_at ASC"
+    )
+    .all(projectId) as { chunkId: string; packedText: string | null }[];
 }
 
 /**
@@ -116,6 +195,7 @@ export function pruneEmptyProjects(): void {
   db.prepare(
     `DELETE FROM pipeline_projects
      WHERE selected_topic IS NULL
+       AND card_id IS NULL
        AND TRIM(COALESCE(master_content, '')) = ''
        AND updated_at < datetime('now', '-1 hour')
        AND NOT EXISTS (SELECT 1 FROM project_materials pm WHERE pm.project_id = pipeline_projects.id)`
@@ -195,6 +275,17 @@ function mapProjectWithMaterials(db: ReturnType<typeof getDb>, row: ProjectRow):
   const variants: Record<string, string> = {};
   for (const v of variantRows) variants[v.platform_id] = v.content;
 
+  const chunkSelection = db
+    .prepare(
+      `SELECT pc.chunk_id AS chunkId, pc.packed_text AS packedText,
+              ki.title AS noteTitle, ki.content AS text
+       FROM project_chunks pc
+       JOIN knowledge_items ki ON ki.id = pc.chunk_id
+       WHERE pc.project_id = ?
+       ORDER BY pc.added_at ASC`
+    )
+    .all(row.id) as { chunkId: string; packedText: string | null; noteTitle: string | null; text: string }[];
+
   let selectedTopic = null;
   if (row.selected_topic) {
     try {
@@ -204,14 +295,48 @@ function mapProjectWithMaterials(db: ReturnType<typeof getDb>, row: ProjectRow):
     }
   }
 
+  let claimSnapshot: PipelineProject["claimSnapshot"] = null;
+  if (row.claim_snapshot) {
+    try {
+      claimSnapshot = JSON.parse(row.claim_snapshot);
+    } catch {
+      claimSnapshot = null;
+    }
+  }
+
+  let brief: PipelineProject["brief"] = null;
+  if (row.brief) {
+    try {
+      brief = JSON.parse(row.brief);
+    } catch {
+      brief = null;
+    }
+  }
+
+  let snapshots: PipelineProject["snapshots"] = [];
+  if (row.snapshots) {
+    try {
+      snapshots = JSON.parse(row.snapshots);
+    } catch {
+      snapshots = [];
+    }
+  }
+
   return {
     id: row.id,
     title: row.title,
     currentStage: normalizePipelineStage(row.current_stage),
+    targetSkill: (row.target_skill as PipelineProject["targetSkill"]) || null,
+    topicId: row.topic_id || null,
     selectedTopic,
     masterContent: row.master_content,
     updatedAt: row.updated_at,
+    cardId: row.card_id,
+    claimSnapshot,
+    brief,
     variants,
+    snapshots,
     materials,
+    chunkSelection,
   };
 }

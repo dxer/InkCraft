@@ -36,6 +36,10 @@ export async function PATCH(request: Request, { params }: Params) {
     sets.push("temperature = ?");
     values.push(Math.max(0, Math.min(2, body.temperature)));
   }
+  if (typeof body.enabled === "boolean") {
+    sets.push("enabled = ?");
+    values.push(body.enabled ? 1 : 0);
+  }
 
   if (sets.length === 0) {
     return NextResponse.json({ error: "没有需要更新的字段" }, { status: 400 });
@@ -52,4 +56,16 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const row = db.prepare("SELECT * FROM custom_agents WHERE id = ?").get(id) as AgentRow;
   return NextResponse.json({ agent: mapAgent(row) });
+}
+
+export async function DELETE(_request: Request, { params }: Params) {
+  const { id } = await params;
+  const db = getDb();
+
+  const res = db.prepare("DELETE FROM custom_agents WHERE id = ?").run(id);
+  if (res.changes === 0) {
+    return NextResponse.json({ error: "技能不存在" }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
 }

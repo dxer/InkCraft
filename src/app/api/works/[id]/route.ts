@@ -4,6 +4,19 @@ import { getProjectById } from "@/lib/pipeline";
 
 export const dynamic = "force-dynamic";
 
+type Params = { params: Promise<{ id: string }> };
+
+/** 删除一件成品（装配项目）：素材挂载、切片勾选、平台变体随外键级联清理 */
+export async function DELETE(_request: Request, { params }: Params) {
+  const { id } = await params;
+  const db = getDb();
+  const result = db.prepare("DELETE FROM pipeline_projects WHERE id = ?").run(id);
+  if (result.changes === 0) {
+    return NextResponse.json({ error: "作品不存在" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -43,6 +56,9 @@ export async function GET(
         id: project.id,
         title: project.title,
         currentStage: project.currentStage,
+        targetSkill: project.targetSkill,
+        topicId: project.topicId || null,
+        selectedTopic: project.selectedTopic || null,
         masterContent: project.masterContent || "",
         updatedAt: project.updatedAt,
         materials: project.materials,

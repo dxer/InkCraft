@@ -37,12 +37,15 @@ test("parseTags 容错:非 JSON / 非数组 / 含非字符串", () => {
   assert.deepEqual(parseTags('[1, "ok"]'), ["ok"]);
 });
 
-test("normalizePipelineStage 将历史阶段值归一为 ideate", () => {
-  assert.equal(normalizePipelineStage("topic"), "ideate");
-  assert.equal(normalizePipelineStage("evidence"), "ideate");
+test("normalizePipelineStage 解析全部阶段并归一历史值", () => {
+  assert.equal(normalizePipelineStage("ideate"), "ideate");
+  assert.equal(normalizePipelineStage("topic"), "topic");
+  assert.equal(normalizePipelineStage("gather"), "gather");
   assert.equal(normalizePipelineStage("draft"), "draft");
   assert.equal(normalizePipelineStage("review"), "review");
   assert.equal(normalizePipelineStage("completed"), "completed");
+  // 历史阶段值归一
+  assert.equal(normalizePipelineStage("evidence"), "ideate");
   assert.equal(normalizePipelineStage(null), "ideate");
   assert.equal(normalizePipelineStage("garbage"), "ideate");
 });
