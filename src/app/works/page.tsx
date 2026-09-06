@@ -23,6 +23,9 @@ export default function WorksPage() {
   const [works, setWorks] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "drafted" | "distributed"
+  >("all");
 
   const fetchWorks = useCallback(async () => {
     try {
@@ -56,9 +59,21 @@ export default function WorksPage() {
     }
   }
 
-  const filtered = works.filter((w) =>
-    w.title.toLowerCase().includes(search.toLowerCase()),
-  );
+  const statusCounts = {
+    all: works.length,
+    drafted: works.filter((w) => w.wordCount > 0).length,
+    distributed: works.filter((w) => w.variants.length > 0).length,
+  };
+
+  const filtered = works
+    .filter((w) =>
+      w.title.toLowerCase().includes(search.toLowerCase()),
+    )
+    .filter((w) => {
+      if (statusFilter === "drafted") return w.wordCount > 0;
+      if (statusFilter === "distributed") return w.variants.length > 0;
+      return true;
+    });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-8 py-8">
@@ -85,7 +100,7 @@ export default function WorksPage() {
         </Button>
       </header>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -95,6 +110,29 @@ export default function WorksPage() {
             placeholder="搜索作品标题..."
             className="pl-9 text-xs rounded-md"
           />
+        </div>
+        <div className="flex items-center gap-1.5" role="group" aria-label="按状态筛选">
+          {(
+            [
+              { key: "all", label: "全部" },
+              { key: "drafted", label: "已成稿" },
+              { key: "distributed", label: "已分发" },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              aria-pressed={statusFilter === key}
+              className={`rounded-full border px-3 py-1 text-xs tabular-nums transition-colors ${
+                statusFilter === key
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+              }`}
+            >
+              {label} ({statusCounts[key]})
+            </button>
+          ))}
         </div>
       </div>
 
@@ -151,8 +189,8 @@ export default function WorksPage() {
                         />
                       ))
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">
-                        未派生分发版本
+                      <span className="rounded border border-dashed px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        未派生
                       </span>
                     )}
                   </div>

@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Share2,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { marked } from "marked";
@@ -319,8 +320,9 @@ export function ReviewStage({
             {/* 逻辑断层 */}
             {report.logicIssues?.length > 0 && (
               <div className="space-y-1.5">
-                <div className="font-semibold text-muted-foreground">
-                  ⚡ 逻辑断层与修改建议
+                <div className="flex items-center gap-1.5 font-semibold text-muted-foreground">
+                  <Zap className="size-3.5" />
+                  逻辑断层与修改建议
                 </div>
                 {report.logicIssues.map((item, i) => (
                   <div

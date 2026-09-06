@@ -245,9 +245,18 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                 </p>
               </div>
               <div className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground">
-                <span className="rounded-md bg-muted px-2 py-1">📝 笔记原料</span>
-                <span className="rounded-md bg-muted px-2 py-1">📚 专属知识库</span>
-                <span className="rounded-md bg-muted px-2 py-1">🏆 创作作品</span>
+                <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
+                  <FileText className="size-3" />
+                  笔记原料
+                </span>
+                <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
+                  <BookOpen className="size-3" />
+                  专属知识库
+                </span>
+                <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
+                  <Library className="size-3" />
+                  创作作品
+                </span>
               </div>
             </div>
           )}

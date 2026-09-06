@@ -1,6 +1,18 @@
 "use client";
 
-import { ArrowRight, Check, Grip, IdCard, Minus, Search } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  FileText,
+  Grip,
+  IdCard,
+  Image as ImageIcon,
+  ListChecks,
+  Mic,
+  Minus,
+  Search,
+  Tag,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,11 +52,11 @@ const SUPPORT_LABEL: Record<CardSupport["type"], string> = {
   counter: "反例 · 边界",
 };
 
-const REUSABLE_ICON: Record<string, string> = {
-  长文段落: "📝",
-  清单: "☑️",
-  口播: "🎙️",
-  金句图: "🖼️",
+const REUSABLE_ICON: Record<string, typeof FileText> = {
+  长文段落: FileText,
+  清单: ListChecks,
+  口播: Mic,
+  金句图: ImageIcon,
 };
 
 export default function CardsPage() {
@@ -104,19 +116,13 @@ export default function CardsPage() {
         </div>
       </header>
 
-      {/* 萃取进度条 */}
+      {/* 萃取统计 */}
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-muted-foreground">AI 萃取进度</span>
+          <span className="font-medium text-muted-foreground">AI 萃取统计</span>
           <span className="tabular-nums text-foreground">
-            {cards.length} 张已入卡
+            已入卡 {cards.length} 张
           </span>
-        </div>
-        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary transition-all duration-700"
-            style={{ width: `${cards.length > 0 ? 100 : 0}%` }}
-          />
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           卡片由入库时的 AI 萃取异步生成；在笔记内容页可随时手动「重新生成」。
@@ -347,11 +353,14 @@ function CardDetailDialog({
               {card.reusable.map((r, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2 rounded-lg border bg-background p-2.5"
+                  className="flex items-start gap-2.5 rounded-lg border bg-background p-2.5"
                 >
-                  <span className="text-sm">
-                    {REUSABLE_ICON[r.type] || "📌"}
-                  </span>
+                  {(() => {
+                    const ReusableIcon = REUSABLE_ICON[r.type] || Tag;
+                    return (
+                      <ReusableIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                    );
+                  })()}
                   <div>
                     <div className="font-semibold text-foreground">
                       {r.type}

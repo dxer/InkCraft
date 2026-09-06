@@ -25,7 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +34,10 @@ import { MoveNotesDialog } from "./knowledge/move-notes-dialog";
 import { ImportDialog } from "./knowledge/import-dialog";
 import { LinkDialog } from "./knowledge/link-dialog";
 import type { KnowledgeBase, NoteItem, NotesResponse } from "@/lib/types";
+
+function subscribeNoop() {
+  return () => {};
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -67,6 +71,14 @@ export default function HomePage() {
     window.addEventListener("click", handleClose);
     return () => window.removeEventListener("click", handleClose);
   }, [openMenu]);
+
+  // 平台检测：Mac 显示 ⌘，其余显示 Ctrl（SSR/首帧渲染通用文案，客户端快照切换）
+  const isMac = useSyncExternalStore(
+    subscribeNoop,
+    () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
+    () => null,
+  );
+  const modKey = isMac === null ? "Ctrl / ⌘" : isMac ? "⌘" : "Ctrl";
 
   useEffect(() => {
     let active = true;
@@ -215,14 +227,14 @@ export default function HomePage() {
               void submitQuickNote();
             }
           }}
-          placeholder="记录现在的想法... 支持 Markdown 语法，按 Ctrl / ⌘ + Enter 秒级入库"
+          placeholder={`记录现在的想法... 支持 Markdown 语法，按 ${modKey} + Enter 秒级入库`}
           className="min-h-24 resize-y border-0 p-0 shadow-none focus-visible:ring-0 text-sm leading-relaxed placeholder:text-muted-foreground/70"
         />
 
         <div className="mt-3 flex items-center justify-between border-t pt-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <kbd className="inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px]">
-              Ctrl / ⌘ + ↵
+              {modKey} + ↵
             </kbd>
             <span>快捷入库</span>
           </div>

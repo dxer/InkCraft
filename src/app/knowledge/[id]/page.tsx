@@ -16,6 +16,7 @@ import {
   Link2,
   ListChecks,
   Loader2,
+  Microscope,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,6 +24,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldQuestion,
   Sparkles,
   Sprout,
   Tag,
@@ -1613,8 +1615,9 @@ export default function KnowledgeDetailPage() {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                    🌱 种子
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <Sprout className="size-3" />
+                                    种子
                                   </span>
                                   <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/85">
                                     {s.seed}
@@ -1636,8 +1639,9 @@ export default function KnowledgeDetailPage() {
 
                                 {s.aha_moment && (
                                   <div className="border-l-2 border-amber-400/60 bg-amber-500/[0.06] px-3.5 py-2.5 text-[13px] italic leading-relaxed text-foreground">
-                                    <span className="mr-1.5 font-semibold not-italic text-amber-600 dark:text-amber-400">
-                                      ✨ Aha 瞬间
+                                    <span className="mr-1.5 inline-flex items-center gap-1 font-semibold not-italic text-amber-600 dark:text-amber-400">
+                                      <Sparkles className="size-3" />
+                                      Aha 瞬间
                                     </span>
                                     {s.aha_moment}
                                   </div>
@@ -1799,9 +1803,10 @@ export default function KnowledgeDetailPage() {
                 onClick={() =>
                   handleAskAi("润色这篇读书笔记，提炼核心金句", "refine")
                 }
-                className="rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
+                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
               >
-                ✨ 精炼 · 润色并提炼金句
+                <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
+                精炼 · 润色并提炼金句
               </button>
               <button
                 onClick={() =>
@@ -1810,9 +1815,10 @@ export default function KnowledgeDetailPage() {
                     "challenge",
                   )
                 }
-                className="rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
+                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
               >
-                🛡️ 反辩 · 红队挑漏洞举反例
+                <ShieldQuestion className="size-3.5 shrink-0 text-muted-foreground" />
+                反辩 · 红队挑漏洞举反例
               </button>
               <button
                 onClick={() =>
@@ -1821,9 +1827,10 @@ export default function KnowledgeDetailPage() {
                     "assess",
                   )
                 }
-                className="rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
+                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
               >
-                🔬 解构 · 密度/倾向/逻辑剖析
+                <Microscope className="size-3.5 shrink-0 text-muted-foreground" />
+                解构 · 密度/倾向/逻辑剖析
               </button>
               <button
                 onClick={() =>
@@ -1832,9 +1839,10 @@ export default function KnowledgeDetailPage() {
                     "expand",
                   )
                 }
-                className="rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
+                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
               >
-                🌱 延展 · 发散长文选题
+                <Sprout className="size-3.5 shrink-0 text-muted-foreground" />
+                延展 · 发散长文选题
               </button>
             </div>
           </div>

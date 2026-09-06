@@ -795,14 +795,13 @@ export function MarkdownEditor({
         )}
       </div>
 
-      {/* 极简底部状态栏（小字微排） */}
+      {/* 极简底部状态栏（小字微排）：主行只留核心三项，全量统计收进悬浮提示 */}
       <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground/60 border-t border-border/15 mt-1">
-        <div className="flex items-center gap-2.5">
+        <div
+          className="flex items-center gap-2.5"
+          title={`共 ${charCount} 字符 · ${lineCount} 行`}
+        >
           <span>{wordCount} 字</span>
-          <span>·</span>
-          <span>{charCount} 字符</span>
-          <span>·</span>
-          <span>{lineCount} 行</span>
           <span>·</span>
           <span>预计阅读 {readMinutes} 分钟</span>
         </div>

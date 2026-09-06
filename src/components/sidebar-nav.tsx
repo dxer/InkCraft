@@ -18,6 +18,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { GlobalSearchDialog } from "@/components/global-search-dialog";
 import { InkCraftMark } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const SECTIONS = [
   {
@@ -96,7 +97,7 @@ export function SidebarNav() {
           }`}
         >
           {isCollapsed ? (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center gap-1">
               <button
                 onClick={toggleCollapse}
                 className="flex size-8 items-center justify-center rounded-md transition-transform hover:scale-105 active:scale-95"
@@ -104,6 +105,7 @@ export function SidebarNav() {
               >
                 <InkCraftMark className="size-7 text-foreground" />
               </button>
+              <ThemeToggle className="size-8" />
             </div>
           ) : (
             <>
@@ -125,6 +127,7 @@ export function SidebarNav() {
                 >
                   <Search className="size-4" />
                 </button>
+                <ThemeToggle />
                 <button
                   onClick={toggleCollapse}
                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -157,7 +160,7 @@ export function SidebarNav() {
           {SECTIONS.map((section, idx) => (
             <div key={idx} className="space-y-1">
               {!isCollapsed && section.title && (
-                <div className="px-3 py-1 text-[11px] font-medium text-muted-foreground/70">
+                <div className="px-3 py-1 text-[11px] font-medium text-muted-foreground">
                   {section.title}
                 </div>
               )}
@@ -168,7 +171,8 @@ export function SidebarNav() {
                 const active =
                   item.href === "/"
                     ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                    : pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
 
                 if (isCollapsed) {
                   return (

@@ -86,7 +86,10 @@ export default function AgentsPage() {
               <CardContent className="p-5 pt-0 space-y-3">
                 <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
                   <div className="mb-1 font-medium text-foreground">系统指令提示词：</div>
-                  <p className="line-clamp-3 font-mono text-[11px] leading-relaxed">
+                  <p
+                    className="line-clamp-3 font-mono text-[11px] leading-relaxed"
+                    title={agent.systemPrompt}
+                  >
                     {agent.systemPrompt}
                   </p>
                 </div>
