@@ -1,0 +1,23 @@
+services:
+  inkcraft:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inkcraft
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 访问控制：公网 VPS 部署时配置访问口令（留空则不开启密码门禁）
+      - ACCESS_PASSWORD=your_secure_password
+      # 大模型 BYOK 默认配置（也可进入网页端 /settings 面板配置）
+      - OPENAI_BASE_URL=https://api.deepseek.com/v1
+      - OPENAI_API_KEY=sk-your-key-here
+      - OPENAI_MODEL=deepseek-chat
+    volumes:
+      # SQLite 数据文件持久化挂载
+      - inkcraft_data:/app/data
+
+volumes:
+  inkcraft_data:
+    name: inkcraft_sqlite_data

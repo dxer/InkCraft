@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "墨匠剪藏 · InkCraft Clipper",
+  "version": "1.0.0",
+  "description": "将网页正文或选中内容一键保存到墨匠知识库。",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "保存到墨匠"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"]
+}
