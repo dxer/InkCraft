@@ -428,12 +428,6 @@ export function MarkdownEditor({
     setTimeout(() => setCopiedMd(false), 2000);
   }
 
-  // 统计指标
-  const charCount = val.length;
-  const wordCount = (val.match(/[\u4e00-\u9fa5]|\b[a-zA-Z0-9_-]+\b/g) || []).length;
-  const lineCount = val ? val.split("\n").length : 0;
-  const readMinutes = Math.max(1, Math.ceil(wordCount / 300));
-
   // Markdown HTML 渲染
   const renderedHtml = React.useMemo(() => {
     try {
@@ -767,7 +761,7 @@ export function MarkdownEditor({
               placeholder={placeholder}
               readOnly={!editable}
               spellCheck={false}
-              className="w-full resize-none py-2 px-0 font-sans text-[15px] leading-relaxed text-foreground bg-transparent outline-none border-none overflow-hidden placeholder:text-muted-foreground/40"
+              className="w-full resize-none py-2 px-0 font-sans text-base leading-relaxed text-foreground bg-transparent outline-none border-none overflow-hidden placeholder:text-muted-foreground/40"
               style={{
                 fontFamily:
                   'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", sans-serif',
@@ -793,22 +787,6 @@ export function MarkdownEditor({
             )}
           </div>
         )}
-      </div>
-
-      {/* 极简底部状态栏（小字微排）：主行只留核心三项，全量统计收进悬浮提示 */}
-      <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground/60 border-t border-border/15 mt-1">
-        <div
-          className="flex items-center gap-2.5"
-          title={`共 ${charCount} 字符 · ${lineCount} 行`}
-        >
-          <span>{wordCount} 字</span>
-          <span>·</span>
-          <span>预计阅读 {readMinutes} 分钟</span>
-        </div>
-
-        <div className="text-[10px] text-muted-foreground/50">
-          Markdown 原生模式
-        </div>
       </div>
     </div>
   );

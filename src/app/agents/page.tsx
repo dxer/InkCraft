@@ -24,6 +24,7 @@ const STAGE_LABELS: Record<string, { name: string; step: string }> = {
   evidence: { name: "02 素材匹配", step: "工步二" },
   draft: { name: "03 初稿起草", step: "工步三" },
   review: { name: "04 编审审查", step: "工步四" },
+  extract: { name: "05 卡片萃取", step: "独立工位" },
 };
 
 export default function AgentsPage() {
@@ -63,14 +64,14 @@ export default function AgentsPage() {
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-44 animate-pulse rounded-xl border bg-muted/40" />
+            <div key={i} className="h-28 animate-pulse rounded-xl border bg-muted/40" />
           ))}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {agents.map((agent) => (
-            <Card key={agent.id} className="relative flex flex-col justify-between rounded-xl border bg-card shadow-xs transition-all hover:border-foreground/30 hover:shadow-sm">
-              <CardHeader className="p-5 pb-3">
+            <Card key={agent.id} className="relative flex flex-col justify-between gap-1.5 rounded-xl border bg-card py-0 shadow-xs transition-all hover:border-foreground/30 hover:shadow-sm">
+              <CardHeader className="gap-1.5 px-4 pt-3 pb-2">
                 <div className="flex items-center justify-between gap-2">
                   <StageBadge stage={agent.stage} />
                   <Badge variant="secondary" className="gap-1 text-[11px] font-normal rounded-md">
@@ -78,36 +79,26 @@ export default function AgentsPage() {
                     {agent.isPreset ? "预置工位" : "自定义"}
                   </Badge>
                 </div>
-                <CardTitle className="mt-2 text-base font-semibold">{agent.name}</CardTitle>
-                <CardDescription className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                <CardTitle className="text-sm font-semibold">{agent.name}</CardTitle>
+                <CardDescription className="line-clamp-2 text-xs leading-snug text-muted-foreground">
                   {agent.persona || "暂无人格口吻说明"}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-5 pt-0 space-y-3">
-                <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-                  <div className="mb-1 font-medium text-foreground">系统指令提示词：</div>
-                  <p
-                    className="line-clamp-3 font-mono text-[11px] leading-relaxed"
-                    title={agent.systemPrompt}
-                  >
-                    {agent.systemPrompt}
-                  </p>
+              <CardContent className="flex items-center justify-between gap-2 px-4 pt-0 pb-3">
+                <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="shrink-0">模型 <code className="font-semibold text-foreground">{agent.model || "跟随全局"}</code></span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="shrink-0">温度 <code className="font-semibold text-foreground">{agent.temperature}</code></span>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                  <div className="flex items-center gap-3">
-                    <span>模型: <code className="text-foreground font-semibold">{agent.model || "跟随全局"}</code></span>
-                    <span>温度: <code className="text-foreground font-semibold">{agent.temperature}</code></span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 text-xs rounded-md hover:text-foreground"
-                    onClick={() => setEditingAgent(agent)}
-                  >
-                    <Edit3 className="size-3.5" />
-                    配置
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 gap-1 px-2 text-xs rounded-md hover:text-foreground"
+                  onClick={() => setEditingAgent(agent)}
+                >
+                  <Edit3 className="size-3.5" />
+                  配置
+                </Button>
               </CardContent>
             </Card>
           ))}
@@ -171,7 +162,10 @@ function EditAgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl rounded-xl p-5">
+      <DialogContent
+        className="sm:max-w-xl rounded-xl p-5 max-h-[85dvh] overflow-y-auto no-scrollbar"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
             <Sparkles className="size-4 text-primary" />
@@ -220,7 +214,7 @@ function EditAgentDialog({
               id="prompt"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
-              className="min-h-36 font-mono text-xs leading-relaxed rounded-md"
+              className="min-h-36 max-h-[45vh] overflow-y-auto font-mono text-xs leading-relaxed rounded-md"
             />
           </div>
           <div className="space-y-1.5">

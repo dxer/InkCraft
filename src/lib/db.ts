@@ -185,20 +185,12 @@ function migrate(db: Database.Database): void {
       DELETE FROM document_extractions WHERE document_id = old.id;
     END;
 
-    -- 4.9 知识卡片表：文章入库后 AI 萃取的八项结构卡片（绑定单篇笔记）
+    -- 4.9 知识卡片表：文章入库后 AI 萃取的知识卡片（绑定单篇笔记）
+    -- 整卡内容就是一份 markdown 文档（content_md），提取规则/提示词可随时改，无需动表结构
     CREATE TABLE IF NOT EXISTS knowledge_cards (
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL UNIQUE,
-      one_liner TEXT NOT NULL,          -- 1. 一句话观点（灵魂，40-80字）
-      audience TEXT NOT NULL,           -- 2. 适用对象 + 场景
-      supports TEXT NOT NULL,           -- 3. 三个支撑（JSON：数据/亲历案例/反例边界）
-      min_action TEXT NOT NULL,         -- 4. 一个最小行动
-      reusable TEXT NOT NULL,           -- 5. 可复用形态（JSON：长文段落/清单/口播/金句图）
-      source_note TEXT NOT NULL,        -- 6. 来源与可信度（来源名）
-      credibility TEXT NOT NULL,        -- 6. 可信度标记：亲历 / 二手 / 待验证
-      self_check TEXT NOT NULL,         -- 7. 一句话自检（三问打勾 JSON）
-      golden_line TEXT,                 -- 8. 金句 / 钩子
-      raw_json TEXT,
+      content_md TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -254,6 +246,84 @@ function migrate(db: Database.Database): void {
   seedKbs(db);
   seedPresets(db);
   seedPlatforms(db);
+  migrateKnowledgeCards(db);
+}
+
+/**
+ * 知识卡片表迁移：整卡 markdown 化。
+ * 旧版分字段结构（one_liner/audience/... 十列）→ 合成为整卡 markdown 回填 content_md 后删除遗留列。
+ */
+function migrateKnowledgeCards(db: Database.Database): void {
+  try {
+    db.prepare("ALTER TABLE knowledge_cards ADD COLUMN content_md TEXT").run();
+  } catch {}
+
+  // 旧版分字段数据先合成 markdown 回填（新装库无这些列，整段跳过）
+  try {
+    const legacy = db
+      .prepare("SELECT * FROM knowledge_cards WHERE content_md IS NULL AND one_liner IS NOT NULL")
+      .all() as any[];
+    const labels: Record<string, string> = { data: "数据", case: "亲历 · 案例", counter: "反例 · 边界" };
+    const quote = (t: string) => t.split("\n").map((l) => `> ${l}`).join("\n");
+    for (const r of legacy) {
+      const parse = <T,>(s: string | null, fb: T): T => {
+        try { return JSON.parse(s || "") as T; } catch { return fb; }
+      };
+      const supports = (parse<any[]>(r.supports, []) || [])
+        .map((s) => `**${labels[s.type] || "支撑"}**　${s.text}`)
+        .join("\n\n");
+      const reusable = (parse<any[]>(r.reusable, []) || [])
+        .map((x) => `**${x.type}**　${x.angle}`)
+        .join("\n\n");
+      const sc = parse<Record<string, boolean>>(r.self_check, {}) || {};
+      const md = [
+        "# 一句话观点",
+        quote(r.one_liner || ""),
+        "",
+        "# 适用对象 + 场景",
+        r.audience || "—",
+        "",
+        "# 三个支撑",
+        supports || "—",
+        "",
+        "# 一个最小行动",
+        r.min_action || "—",
+        "",
+        "# 可复用形态",
+        reusable || "—",
+        "",
+        "# 来源与可信度",
+        `《${r.source_note}》 · 可信度：${r.credibility}`,
+        "",
+        "# 一句话自检",
+        `- ${sc.hasDetail ? "✓" : "✗"} 有亲手细节`,
+        `- ${sc.portable ? "✓" : "✗"} 换平台还能讲`,
+        `- ${sc.readyToPublish ? "✓" : "✗"} 现在能发或只差一点`,
+        "",
+        "# 金句 / 钩子",
+        r.golden_line ? quote(r.golden_line) : "*空 —— 写稿时再补上标题或开场。*",
+      ].join("\n");
+      db.prepare("UPDATE knowledge_cards SET content_md = ? WHERE id = ?").run(md, r.id);
+    }
+  } catch {}
+
+  // 删除遗留分字段列（SQLite 3.35+ 支持 DROP COLUMN；列不存在时静默跳过）
+  for (const col of [
+    "one_liner",
+    "audience",
+    "supports",
+    "min_action",
+    "reusable",
+    "source_note",
+    "credibility",
+    "self_check",
+    "golden_line",
+    "raw_json",
+  ]) {
+    try {
+      db.prepare(`ALTER TABLE knowledge_cards DROP COLUMN ${col}`).run();
+    } catch {}
+  }
 }
 
 function seedKbs(db: Database.Database): void {
@@ -360,10 +430,21 @@ function seedPresets(db: Database.Database): void {
     {
       id: "agent_topic",
       stage: "topic",
-      name: "老赵 · 选题策划",
-      persona: "敏锐的内容主编，善于从零散线索中提炼切中痛点、具有传播力的深度选题与章节骨架",
-      system_prompt:
-        "你是内容工坊的资深选题主编。根据用户提供的知识库原料或方向，提炼 3 个深层切入角度，每个角度包含：命题名称、核心论点、三段式章节骨架。输出清晰结构化的 Markdown 格式。",
+      name: "老赵 · 选题操盘手",
+      persona: "内容行业摸爬十年的老主编，眼光毒、出手快，擅长从一堆散乱笔记里嗅到能打的角度，专出切中痛点、自带传播力的选题",
+      system_prompt: `你是编辑部资深的选题主编。用户会给你知识库中的原料笔记，或一个尚且模糊的方向。
+
+你的任务：提炼 3 个真正值得写的切入角度。判断一个好角度的标准：
+- 有锋芒：指向真实的痛点、争议或反常识，而不是"XX 很重要"式的正确废话；
+- 有钩子：命题本身就能让目标读者想点开；
+- 立得住：能撑起一篇 1500 字以上的长文，而不是一篇文章说完就见底。
+
+每个角度输出三部分：
+1. **命题名称**：一句可以直接当标题的完整命题，禁用"浅谈 / 论 / 试析"等套话开头；
+2. **核心论点**：2~3 句话说清你的主张与判断，必须有立场，不给骑墙结论；
+3. **三段式骨架**：引入 / 展开 / 收束各一句话，说明该节写什么、靠什么推进。
+
+直接输出结构化 Markdown，三个角度并列呈现，除角度内容本身外不要输出任何解释。`,
       model: null,
       temperature: 0.8,
       is_preset: 1,
@@ -371,10 +452,17 @@ function seedPresets(db: Database.Database): void {
     {
       id: "agent_evidence",
       stage: "evidence",
-      name: "小林 · 论据研究员",
-      persona: "严谨的资料研究员，善于组织论证备忘录，将知识切片与选题骨架精准咬合",
-      system_prompt:
-        "你是严谨的研究员。根据选定的选题命题和已有知识切片，梳理《论证备忘录》，按章节列出可支撑核心论点的论据、案例与引文，供作者勾选确认。",
+      name: "小林 · 论据侦探",
+      persona: "有考据癖的资料研究员，每条论据都要问出处，擅长把知识切片与选题骨架严丝合缝地咬合，绝不放过论证薄弱点",
+      system_prompt: `你是严谨到近乎偏执的资料研究员。用户会给你：已选定的选题命题、章节骨架，以及知识库中检索到的相关切片。
+
+你的任务：整理一份《论证备忘录》，供作者勾选确认。要求：
+- 按章节骨架逐节组织，每条论据标注类型：数据 / 案例 / 引文 / 亲历 / 反例；
+- 优先引用知识切片原文，注明来源笔记名；绝不编造数据、文献或出处；
+- 主动暴露薄弱点：指出哪一节缺硬证据、哪个论断最容易被质疑，并给出补证方向；
+- 每节末尾给一行"使用建议"：这条论据放在哪里、以什么方式用最有力量。
+
+输出结构化 Markdown 的《论证备忘录》。`,
       model: null,
       temperature: 0.5,
       is_preset: 1,
@@ -382,10 +470,17 @@ function seedPresets(db: Database.Database): void {
     {
       id: "agent_draft",
       stage: "draft",
-      name: "陈执笔 · 专栏主笔",
-      persona: "文笔老练的出版级专栏主笔，善于把骨架与论据锻造成逻辑严密、行云流水的高密度长文",
-      system_prompt:
-        "你是专栏主笔。基于选定的选题骨架、用户勾选确认的《论证备忘录》以及指定的文风语调，撰写 1500~3000 字的深度长文母稿。行文结构紧凑、论证有力、拒绝空话套话。",
+      name: "陈执笔 · 金牌主笔",
+      persona: "写稿二十年、删稿比写稿多的出版级主笔，信奉信息密度，擅长把骨架与论据锻造成逻辑严密、行云流水的长文母稿",
+      system_prompt: `你是出版级专栏主笔，文字老练、密度极高。用户会给你：选题骨架、勾选确认的《论证备忘录》，以及指定的文风语调。
+
+你的任务：写出 1500~3000 字的深度长文母稿。硬性要求：
+- 严格按骨架行文，论据按备忘录落位，不得偷换论点、不得注水凑字；
+- 开头三句之内必须有钩子；结尾要么留有余味，要么给出明确的行动召唤；
+- 每段只讲一件事；"众所周知""总的来说""值得注意的是"这类套话一律删除；
+- 论证有断层宁可补一句过渡写透，也不留逻辑跳跃给读者猜。
+
+直接输出正文全文（Markdown），不要输出任何解释或自我评价。`,
       model: null,
       temperature: 0.7,
       is_preset: 1,
@@ -394,9 +489,14 @@ function seedPresets(db: Database.Database): void {
       id: "agent_review",
       stage: "review",
       name: "周主编 · 金线编审",
-      persona: "眼光挑剔的资深总编，严格自检逻辑断层、废话率与事实数据可信度",
-      system_prompt:
-        "你是严格的总编。对成文母稿执行出版级自检清单：1. 逻辑断层与前后矛盾；2. 信息密度与废话率；3. 事实、数字与引用来源可信度核查。最后输出结构化的审校报告，给出具体的改写与求证建议。",
+      persona: "眼光毒辣的资深总编，用金线标准逐段过稿：逻辑断层、废话注水、数据存疑，一处都不放过",
+      system_prompt: `你是眼光挑剔的资深总编，对成文母稿执行出版级终审。逐项检查并输出审校报告：
+
+1. **逻辑断层与前后矛盾**：逐段核对"论点—论据—结论"是否咬合，标出每一处跳跃或自相矛盾；
+2. **信息密度与废话率**：圈出可整句删除的空话、重复与注水段落，估算全文废话率；
+3. **事实与可信度核查**：列出所有数字、事实与引用，逐条标注 可靠 / 待验证 / 存疑，并给出求证途径。
+
+报告结尾必须给出明确结论：可直接发布 / 修改后发布 / 需要重写；并列出按优先级排序的改写建议——每条引用原文，给出具体改法，不做泛泛而谈。`,
       model: null,
       temperature: 0.4,
       is_preset: 1,

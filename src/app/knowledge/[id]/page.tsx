@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { InkCraftMark } from "@/components/logo";
+import { Textarea } from "@/components/ui/textarea";
 import { DeleteNotesDialog } from "../delete-notes-dialog";
 import { EditKbDialog } from "../edit-kb-dialog";
 import { EditNoteDialog } from "../edit-note-dialog";
@@ -163,6 +164,7 @@ export default function KnowledgeDetailPage() {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
 
   const mdFileInputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement | null>(null);
 
   // 删除确认对话框状态
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -239,6 +241,7 @@ export default function KnowledgeDetailPage() {
       setMenuNoteId(null);
       setAddMenuOpen(false);
       setKbDropdownOpen(false);
+      setIsAddingTag(false);
     }
     window.addEventListener("click", handleClickOutside);
     return () => window.removeEventListener("click", handleClickOutside);
@@ -365,7 +368,28 @@ export default function KnowledgeDetailPage() {
     setIsAddingTag(false);
   }
 
-  // 1. 行内添加标签
+  // 添加标签下拉面板：聚合当前知识库已有标签（供选择/搜索/创建）
+  const knownTags = (() => {
+    const counts = new Map<string, number>();
+    for (const n of notes) {
+      for (const t of n.tags || []) {
+        const clean = t.replace(/^#/, "").trim();
+        if (clean) counts.set(clean, (counts.get(clean) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  })();
+  const noteTags = selectedNote?.tags || [];
+  const currentTag = newTagInput.replace(/^#/, "").trim();
+  const candidateTags = knownTags.filter(
+    (t) =>
+      !noteTags.includes(t.name) &&
+      (!currentTag || t.name.toLowerCase().includes(currentTag.toLowerCase())),
+  );
+
+  // 1. 添加标签（下拉面板内：点选已有标签或创建新标签）
   async function handleAddTag(tagToAdd: string) {
     const cleanTag = tagToAdd.replace(/^#/, "").trim();
     if (!cleanTag || !selectedNote) return;
@@ -373,7 +397,6 @@ export default function KnowledgeDetailPage() {
     const currentTags = selectedNote.tags || [];
     if (currentTags.includes(cleanTag)) {
       setNewTagInput("");
-      setIsAddingTag(false);
       return;
     }
 
@@ -385,7 +408,6 @@ export default function KnowledgeDetailPage() {
       ),
     );
     setNewTagInput("");
-    setIsAddingTag(false);
 
     await fetch(`/api/notes/${selectedNote.id}`, {
       method: "PATCH",
@@ -513,6 +535,43 @@ export default function KnowledgeDetailPage() {
     }
   }
 
+  // 立即保存当前笔记（防抖自动保存与 Ctrl+S 共用）；无实质修改或内容为空时静默跳过
+  const saveNote = useCallback(async () => {
+    if (!selectedNote) return;
+    const currentTitle = editingTitle.trim();
+    const currentContent = editingContent.trim();
+    const originalTitle = (selectedNote.title || "").trim();
+    const originalContent = (selectedNote.content || "").trim();
+    if (currentTitle === originalTitle && currentContent === originalContent) return;
+    if (!currentContent) return;
+
+    setSavingNote(true);
+    setSavedSuccess(false);
+    try {
+      const res = await fetch(`/api/notes/${selectedNote.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: currentTitle || null,
+          content: currentContent,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedNote(data.note);
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 2500);
+        setNotes((prev) =>
+          prev.map((n) => (n.id === selectedNote.id ? data.note : n)),
+        );
+      }
+    } catch (err) {
+      console.error("保存笔记失败:", err);
+    } finally {
+      setSavingNote(false);
+    }
+  }, [editingTitle, editingContent, selectedNote]);
+
   // 自动防抖保存笔记修改（用户输入时静默实时保存）
   useEffect(() => {
     if (!selectedNote) return;
@@ -527,37 +586,37 @@ export default function KnowledgeDetailPage() {
     }
     if (!currentContent) return;
 
-    // 保存中状态在防抖到期后（异步回调内）再置位，避免同步 setState（react-hooks/set-state-in-effect）
-    const timer = setTimeout(async () => {
-      setSavingNote(true);
-      setSavedSuccess(false);
-      try {
-        const res = await fetch(`/api/notes/${selectedNote.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: currentTitle || null,
-            content: currentContent,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setSelectedNote(data.note);
-          setSavedSuccess(true);
-          setTimeout(() => setSavedSuccess(false), 2500);
-          setNotes((prev) =>
-            prev.map((n) => (n.id === selectedNote.id ? data.note : n)),
-          );
-        }
-      } catch (err) {
-        console.error("自动保存笔记失败:", err);
-      } finally {
-        setSavingNote(false);
-      }
+    const timer = setTimeout(() => {
+      void saveNote();
     }, 800);
 
     return () => clearTimeout(timer);
-  }, [editingTitle, editingContent, selectedNote?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editingTitle, editingContent, selectedNote?.id, saveNote]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ctrl/Cmd+S 立即保存当前笔记（拦截浏览器默认保存对话框）
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void saveNote();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [saveNote]);
+
+  // 标题过长自动换行：随内容与窗口宽度自适应高度（纯 DOM 调整，不触发 setState）
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [editingTitle, selectedNote?.id]);
 
   // 触发删除单篇笔记
   function triggerDeleteSingle(note: NoteItem, e: React.MouseEvent) {
@@ -1137,10 +1196,10 @@ export default function KnowledgeDetailPage() {
                       <FileText className="size-3.5 shrink-0 text-muted-foreground/80" />
 
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-foreground leading-tight">
+                        <div className="truncate text-sm font-medium text-foreground leading-tight">
                           {n.title || "未命名笔记"}
                         </div>
-                        <div className="text-[10px] text-muted-foreground/75 leading-none mt-0.5">
+                        <div className="text-[11px] text-muted-foreground/75 leading-none mt-0.5">
                           {formatCompactTime(n.createdAt)}
                         </div>
                       </div>
@@ -1313,12 +1372,23 @@ export default function KnowledgeDetailPage() {
             <div className="flex flex-col flex-1">
               {/* 笔记标题与标签区域（纯标签体系，支持行内删除、增加与智能标签推荐） */}
               <div className="w-full max-w-4xl mx-auto px-8 pt-8 pb-2 space-y-3.5">
-                <Input
+                {/* 标题用自适应高度文本域：过长自动换行；回车视为确认而非换行 */}
+                <Textarea
+                  ref={titleRef}
                   aria-label="笔记标题"
+                  rows={1}
                   value={editingTitle}
-                  onChange={(e) => setEditingTitle(e.target.value)}
+                  onChange={(e) =>
+                    setEditingTitle(e.target.value.replace(/\s*[\r\n]+\s*/g, " "))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
                   placeholder="笔记标题..."
-                  className="border-0 p-0 text-2xl sm:text-[28px] font-bold tracking-tight shadow-none focus-visible:ring-0 h-auto py-1 leading-snug text-foreground placeholder:text-muted-foreground/35"
+                  className="min-h-0 resize-none overflow-hidden border-0 rounded-md p-0 py-1 text-2xl sm:text-[28px] md:text-[28px] font-bold tracking-tight shadow-none focus-visible:ring-0 h-auto leading-snug text-foreground placeholder:text-muted-foreground/35"
                 />
 
                 {/* 标签栏 */}
@@ -1349,57 +1419,113 @@ export default function KnowledgeDetailPage() {
                     </span>
                   ))}
 
-                  {/* 行内添加标签输入框或触发按钮 */}
-                  {isAddingTag ? (
-                    <div className="inline-flex items-center gap-1">
-                      <input
-                        autoFocus
-                        value={newTagInput}
-                        onChange={(e) => setNewTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void handleAddTag(newTagInput);
-                          } else if (e.key === "Escape") {
-                            setIsAddingTag(false);
-                            setNewTagInput("");
-                          }
-                        }}
-                        onBlur={() => {
-                          if (newTagInput.trim()) {
-                            void handleAddTag(newTagInput);
-                          } else {
-                            setIsAddingTag(false);
-                          }
-                        }}
-                        placeholder="输入新标签按回车..."
-                        className="h-6 w-28 rounded-md border bg-background px-2 text-[11px] outline-none ring-1 ring-primary"
-                      />
+                  {/* 添加标签下拉面板 */}
+                  {isAddingTag && (
+                    <div
+                      className="absolute left-0 top-full mt-1.5 z-30 w-64 overflow-hidden rounded-xl border bg-popover shadow-2xl backdrop-blur-md ring-1 ring-black/5 animate-in fade-in-0 zoom-in-95 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="border-b p-2">
+                        <input
+                          autoFocus
+                          value={newTagInput}
+                          onChange={(e) => setNewTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.stopPropagation();
+                              setIsAddingTag(false);
+                              setNewTagInput("");
+                            } else if (e.key === "Enter" && currentTag) {
+                              e.preventDefault();
+                              void handleAddTag(currentTag);
+                            }
+                          }}
+                          placeholder="搜索已有标签，或输入新标签回车创建..."
+                          className="w-full rounded-md border bg-background px-2.5 py-1.5 text-[11px] outline-none focus:border-primary/50"
+                        />
+                      </div>
+                      <div className="max-h-56 overflow-y-auto p-1">
+                        {currentTag &&
+                          !knownTags.some((t) => t.name === currentTag) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleAddTag(currentTag)}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-primary transition-colors hover:bg-muted"
+                            >
+                              <Plus className="size-3" />
+                              创建「{currentTag}」
+                            </button>
+                          )}
+                        {candidateTags.map((t) => (
+                          <button
+                            key={t.name}
+                            type="button"
+                            onClick={() => void handleAddTag(t.name)}
+                            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-foreground transition-colors hover:bg-muted"
+                          >
+                            <span className="truncate">{t.name}</span>
+                            <span className="tabular-nums text-[10px] text-muted-foreground/60">
+                              {t.count} 篇
+                            </span>
+                          </button>
+                        ))}
+                        {!currentTag && candidateTags.length === 0 && (
+                          <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/70">
+                            暂无其他标签，输入即可创建
+                          </div>
+                        )}
+                        {currentTag &&
+                          candidateTags.length === 0 &&
+                          knownTags.some((t) => t.name === currentTag) &&
+                          noteTags.includes(currentTag) && (
+                            <div className="px-2 py-3 text-center text-[11px] text-muted-foreground/70">
+                              当前笔记已拥有该标签
+                            </div>
+                          )}
+                      </div>
                     </div>
+                  )}
+                  {isAddingTag ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground bg-muted rounded-md gap-0.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsAddingTag(false);
+                        setNewTagInput("");
+                      }}
+                    >
+                      <span>收起</span>
+                    </Button>
                   ) : (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground rounded-md gap-0.5"
-                      onClick={() => setIsAddingTag(true)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsAddingTag(true);
+                        setNewTagInput("");
+                      }}
                     >
                       <Plus className="size-3" />
                       <span>添加标签</span>
                     </Button>
                   )}
 
-                  {/* ✨ 智能标签按钮 */}
+                  {/* 智能标签按钮（与添加标签同款胶囊样式，紫色以区分 AI 功能） */}
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[11px] rounded-md gap-1 text-primary border-primary/30 hover:bg-primary/5 hover:border-primary"
+                    className="h-6 px-2 text-[11px] rounded-md gap-0.5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300"
                     onClick={handleGenerateSmartTags}
                     disabled={smartTagsLoading}
                   >
                     {smartTagsLoading ? (
                       <Loader2 className="size-3 animate-spin" />
                     ) : (
-                      <Sparkles className="size-3 text-primary" />
+                      <Plus className="size-3" />
                     )}
                     <span>智能标签</span>
                   </Button>
@@ -1482,7 +1608,7 @@ export default function KnowledgeDetailPage() {
                 </div>
 
                 {/* 内容/智鉴切换（独立一行，位于标签下方） */}
-                <div className="flex items-center gap-4 border-b text-xs">
+                <div className="flex items-center gap-4 border-b text-sm">
                   <button
                     onClick={() => setActiveTab("content")}
                     className={`font-semibold pb-1.5 -mb-px border-b-2 transition-colors ${

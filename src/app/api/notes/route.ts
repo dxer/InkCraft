@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { isAiConfigured, runTidy, tidyContent } from "@/lib/ai";
+import { isAiConfigured, runTidy } from "@/lib/ai";
 import { extractCardFromDoc } from "@/lib/cards";
-import { extractClaimsFromDoc } from "@/lib/claims";
 import { clipUrl } from "@/lib/clip";
 import { getDb } from "@/lib/db";
 import { mapKb, mapNote, type KbRow, type KnowledgeRow } from "@/lib/mappers";
 import { parsePdfBuffer } from "@/lib/pdf";
 import { ftsSearchNotes, likeSearchNotes } from "@/lib/search";
+import { deriveTitleFromContent } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -120,29 +120,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "笔记内容不能为空" }, { status: 400 });
   }
 
+  // 未填写标题时，截取正文开头作为标题
+  if (!title) title = deriveTitleFromContent(content);
+
   const id = randomUUID();
   db.prepare(
     "INSERT INTO knowledge_items (id, kb_id, document_id, chunk_index, title, content, item_type, category) VALUES (?, ?, NULL, NULL, ?, ?, 'note', ?)",
   ).run(id, kbId, title || null, content, category);
 
-  // 异步 AI 自动整理与观点微粒抽取
-  if (isAiConfigured()) {
-    runTidy(
-      tidyContent(content).then((meta) => {
-        if (!meta) return;
-        db.prepare(
-          "UPDATE knowledge_items SET title = COALESCE(?, title), tags = COALESCE(?, tags), auto_meta = 1 WHERE id = ?",
-        ).run(
-          meta.title ?? null,
-          meta.tags ? JSON.stringify(meta.tags) : null,
-          id,
-        );
-      }),
-    );
-  }
-  // 异步提取观点微粒（即使未配置 AI 也走规则降级，不阻塞响应）
-  runTidy(extractClaimsFromDoc(id, content));
-  // 异步萃取八项知识卡片（同上，fire-and-forget）
+  // 录入后仅异步萃取八项知识卡片；标题/标签/智鉴均不主动运行，由用户手动触发
   runTidy(extractCardFromDoc(id, content));
 
   const row = db

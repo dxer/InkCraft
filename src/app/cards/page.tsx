@@ -3,18 +3,15 @@
 import {
   ArrowRight,
   Check,
-  FileText,
+  Copy,
   Grip,
+  Hammer,
   IdCard,
-  Image as ImageIcon,
-  ListChecks,
-  Mic,
-  Minus,
   Search,
-  Tag,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useRouter } from "next/navigation";
+import { marked } from "marked";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { KnowledgeCard, CardSupport } from "@/lib/cards";
+import type { KnowledgeCard } from "@/lib/cards";
 import { cn } from "@/lib/utils";
 
 interface CardListItem extends KnowledgeCard {
@@ -31,33 +29,27 @@ interface CardListItem extends KnowledgeCard {
   updated_at: string;
 }
 
-const CRED_META: Record<string, { label: string; cls: string }> = {
-  亲历: {
-    label: "亲历",
-    cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  },
-  二手: {
-    label: "二手",
-    cls: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  },
-  待验证: {
-    label: "待验证",
-    cls: "border-muted-foreground/30 bg-muted/20 text-muted-foreground",
-  },
-};
-
-const SUPPORT_LABEL: Record<CardSupport["type"], string> = {
-  data: "数据",
-  case: "亲历 · 案例",
-  counter: "反例 · 边界",
-};
-
-const REUSABLE_ICON: Record<string, typeof FileText> = {
-  长文段落: FileText,
-  清单: ListChecks,
-  口播: Mic,
-  金句图: ImageIcon,
-};
+/** 从整卡 markdown 中提取画廊预览文本：lead 为首个正文行（观点），rest 为次行 */
+function mdPreview(md: string): { lead: string; rest: string } {
+  const isHeading = (l: string) => /^#{1,6}\s/.test(l);
+  const plain = (l: string) =>
+    l.replace(/^>\s*/, "").replace(/^[-*+]\s+\[[ xX]\]\s*/, "").replace(/^[-*+]\s+/, "").replace(/\*\*/g, "").trim();
+  let lead = "";
+  let rest = "";
+  for (const raw of md.split("\n")) {
+    const line = raw.trim();
+    if (!line || isHeading(line)) continue;
+    const text = plain(line);
+    if (!text || text === "—") continue;
+    if (!lead) {
+      lead = text;
+      continue;
+    }
+    rest = text;
+    break;
+  }
+  return { lead: lead || "空卡片", rest };
+}
 
 export default function CardsPage() {
   const [cards, setCards] = useState<CardListItem[]>([]);
@@ -86,10 +78,8 @@ export default function CardsPage() {
     if (!q) return cards;
     return cards.filter(
       (c) =>
-        c.one_liner.toLowerCase().includes(q) ||
-        c.audience.toLowerCase().includes(q) ||
-        (c.note_title || "").toLowerCase().includes(q) ||
-        (c.golden_line || "").toLowerCase().includes(q),
+        c.content_md.toLowerCase().includes(q) ||
+        (c.note_title || "").toLowerCase().includes(q),
     );
   }, [cards, search]);
 
@@ -176,17 +166,12 @@ export default function CardsPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                   <span className="truncate pr-3">《{hero.note_title}》</span>
-                  {hero.golden_line && (
-                    <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-                      有金句 ✓
-                    </span>
-                  )}
                 </div>
                 <p className="text-xl font-semibold leading-relaxed tracking-tight text-foreground">
-                  “{hero.one_liner}”
+                  {mdPreview(hero.content_md).lead}
                 </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {hero.audience}
+                <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+                  {mdPreview(hero.content_md).rest}
                 </p>
               </div>
               <div className="mt-4 flex items-center justify-between border-t pt-3">
@@ -234,17 +219,12 @@ function MiniCard({
       <Grip className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
       <div className="min-w-0 flex-1 space-y-1.5">
         <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-          {card.one_liner}
+          {mdPreview(card.content_md).lead}
         </p>
         <p className="line-clamp-1 text-[11px] text-muted-foreground">
           《{card.note_title}》
         </p>
       </div>
-      {card.golden_line && (
-        <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
-          ✦
-        </Badge>
-      )}
     </button>
   );
 }
@@ -256,200 +236,119 @@ function CardDetailDialog({
   card: CardListItem | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const router = useRouter();
   if (!card) return null;
-  const cred = CRED_META[card.credibility] || CRED_META["待验证"];
+  const current = card;
+
+  function handleCopy() {
+    navigator.clipboard.writeText(current.content_md);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  /** 二次创作：卡片观点作为选题种子 + 源笔记挂为工坊素材，交给流水线创作 */
+  function handleSendToWorkshop() {
+    const { lead, rest } = mdPreview(current.content_md);
+    const payload = {
+      topic: {
+        title: lead.length > 50 ? `${lead.slice(0, 50)}…` : lead,
+        angle: `基于知识卡片《${current.note_title || "未命名笔记"}》进行二次创作。卡片观点：${lead}${rest ? ` 适用：${rest}` : ""}`,
+        outline: [
+          "引入：以一句话观点与金句钩子切入",
+          "展开：用三个支撑、案例与反例充实论证",
+          "落点：以最小行动与可复用形态收束",
+        ],
+      },
+      materialIds: current.document_id ? [current.document_id] : [],
+    };
+    sessionStorage.setItem("inkcraft_pending_topic", JSON.stringify(payload));
+    router.push("/workshop");
+  }
 
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <div className="flex items-center justify-between pr-8">
-            <div className="flex items-center gap-2">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <IdCard className="size-4" />
-              </span>
-              <div>
-                <DialogTitle className="text-base font-semibold">
-                  知识卡片
-                </DialogTitle>
-                <DialogDescription className="text-xs">
-                  《{card.note_title || "未命名笔记"}》
-                </DialogDescription>
-              </div>
-            </div>
-            <span
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                cred.cls,
-              )}
-            >
-              {card.credibility}
+      <DialogContent
+        className="gap-0 overflow-hidden rounded-xl p-0 sm:max-w-3xl"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <DialogHeader className="border-b bg-muted/40 px-5 py-3.5">
+          <div className="flex items-center gap-2.5 pr-8">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <IdCard className="size-4" />
             </span>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-semibold">
+                知识卡片
+              </DialogTitle>
+              <DialogDescription className="truncate text-xs">
+                《{card.note_title || "未命名笔记"}》
+              </DialogDescription>
+            </div>
           </div>
         </DialogHeader>
 
-        <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1 text-xs">
-          {/* 1 一句话观点 */}
-          <section>
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ① 一句话观点
-            </div>
-            <p className="text-[15px] font-semibold leading-relaxed text-foreground">
-              “{card.one_liner}”
-            </p>
-          </section>
+        {/* 整卡内容就是一份 markdown 文档，直接渲染 */}
+        <MdText
+          text={card.content_md}
+          className="no-scrollbar max-h-[62vh] overflow-y-auto px-6 py-5"
+        />
 
-          {/* 2 适用对象+场景 */}
-          <section>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ② 适用对象 + 场景
-            </div>
-            <p className="leading-relaxed text-foreground/85">
-              {card.audience}
-            </p>
-          </section>
-
-          {/* 3 三个支撑 */}
-          <section>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ③ 三个支撑
-            </div>
-            <div className="space-y-2">
-              {card.supports.map((s, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2.5 rounded-lg border bg-muted/20 p-3"
-                >
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 text-[10px] font-normal"
-                  >
-                    {SUPPORT_LABEL[s.type] || "支撑"}
-                  </Badge>
-                  <span className="leading-relaxed text-foreground/85">
-                    {s.text}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 4 最小行动 */}
-          <section>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ④ 一个最小行动
-            </div>
-            <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3">
-              {card.min_action}
-            </div>
-          </section>
-
-          {/* 5 可复用形态 */}
-          <section>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ⑤ 可复用形态
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {card.reusable.map((r, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2.5 rounded-lg border bg-background p-2.5"
-                >
-                  {(() => {
-                    const ReusableIcon = REUSABLE_ICON[r.type] || Tag;
-                    return (
-                      <ReusableIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                    );
-                  })()}
-                  <div>
-                    <div className="font-semibold text-foreground">
-                      {r.type}
-                    </div>
-                    <div className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {r.angle}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 6 来源与可信度 */}
-          <section>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ⑥ 来源与可信度
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="truncate text-foreground/85">
-                《{card.source_note}》
-              </span>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                  cred.cls,
-                )}
-              >
-                {card.credibility}
-              </span>
-            </div>
-          </section>
-
-          {/* 7 一句话自检 */}
-          <section>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ⑦ 一句话自检
-            </div>
-            <div className="space-y-1.5">
-              <SelfCheckRow
-                done={card.self_check.hasDetail}
-                label="有亲手细节"
-              />
-              <SelfCheckRow
-                done={card.self_check.portable}
-                label="换平台还能讲"
-              />
-              <SelfCheckRow
-                done={card.self_check.readyToPublish}
-                label="现在能发或只差一点"
-              />
-            </div>
-          </section>
-
-          {/* 8 金句/钩子 */}
-          <section className="border-t border-border/40 pt-3">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              ⑧ 金句 / 钩子
-            </div>
-            {card.golden_line ? (
-              <p className="text-[14px] font-medium italic leading-relaxed text-foreground">
-                “{card.golden_line}”
-              </p>
-            ) : (
-              <p className="text-muted-foreground/60">
-                空 —— 写稿时再补上标题或开场。
-              </p>
-            )}
-          </section>
+        {/* 底栏：复制 + 送去工坊二次创作 */}
+        <div className="flex items-center justify-between gap-3 border-t bg-muted/40 px-5 py-3">
+          <span className="truncate text-[11px] text-muted-foreground">
+            萃取于{" "}
+            {card.updated_at
+              ? new Date(card.updated_at).toLocaleDateString("zh-CN")
+              : "—"}
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-md text-xs"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <>
+                  <Check className="size-3.5 text-primary" />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy className="size-3.5" />
+                  复制卡片
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5 rounded-md text-xs font-semibold"
+              onClick={handleSendToWorkshop}
+            >
+              <Hammer className="size-3.5" />
+              送去工坊创作
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function SelfCheckRow({ done, label }: { done: boolean; label: string }) {
+/** 卡片字段 markdown 渲染：与编辑器预览同源（marked），直接输出阅读排版 */
+function MdText({ text, className }: { text: string; className?: string }) {
+  const html = useMemo(() => {
+    try {
+      return marked.parse(text || "", { gfm: true, breaks: true }) as string;
+    } catch {
+      return text;
+    }
+  }, [text]);
   return (
-    <div className="flex items-center gap-2 text-foreground/85">
-      <span
-        className={cn(
-          "flex size-4 items-center justify-center rounded-full border",
-          done
-            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
-            : "border-border text-muted-foreground",
-        )}
-      >
-        {done ? <Check className="size-2.5" /> : <Minus className="size-2.5" />}
-      </span>
-      <span>{label}</span>
-    </div>
+    <div
+      className={cn("markdown-body", className)}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }

@@ -13,3 +13,15 @@ export function markdownLength(md: string): number {
       .replace(/[*_>~-]/g, "") // 强调/引用等
       .replace(/\s+/g, "").length;
 }
+
+/**
+ * 未填写标题时的兜底：取正文开头一段作为标题（去开头标题标记、折叠空白，超长截断加省略号）。
+ */
+export function deriveTitleFromContent(content: string, max = 30): string {
+   const text = content
+      .replace(/^#{1,6}\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+   if (!text) return "";
+   return text.length > max ? `${text.slice(0, max)}…` : text;
+}

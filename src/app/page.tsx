@@ -3,13 +3,13 @@
 import {
   ArrowUpDown,
   ArrowRight,
+  BookOpen,
   Check,
   Clock,
   Copy,
   Download,
   Edit3,
   FolderInput,
-  Hash,
   Inbox,
   Link2,
   ListChecks,
@@ -18,8 +18,6 @@ import {
   RefreshCw,
   Send,
   SlidersHorizontal,
-  Sparkles,
-  Tag,
   Trash2,
   Upload,
   Zap,
@@ -45,7 +43,6 @@ export default function HomePage() {
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTag, setSelectedTag] = useState<string>("all");
 
   // Dialogs
   const [linkOpen, setLinkOpen] = useState(false);
@@ -164,28 +161,8 @@ export default function HomePage() {
   const allNotes = data?.notes || [];
   const kbs = data?.kbs || [];
 
-  // 聚合所有出现过的标签与数量
-  const tagCounts = new Map<string, number>();
-  for (const n of allNotes) {
-    for (const t of n.tags || []) {
-      const clean = t.replace(/^#/, "").trim();
-      if (clean) {
-        tagCounts.set(clean, (tagCounts.get(clean) || 0) + 1);
-      }
-    }
-  }
-  const allTags = Array.from(tagCounts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-
   const filteredNotes = (() => {
-    const byTag =
-      selectedTag === "all"
-        ? allNotes
-        : allNotes.filter((n) =>
-            (n.tags || []).map((t) => t.replace(/^#/, "")).includes(selectedTag)
-          );
-    const byKb = byTag.filter(
+    const byKb = allNotes.filter(
       (n) => filterKb === "all" || (n.kbId || "default") === filterKb
     );
 
@@ -197,8 +174,29 @@ export default function HomePage() {
     const keyOf = (n: NoteItem) =>
       sortKey === "updated" ? ts(n.updatedAt || n.createdAt) : ts(n.createdAt);
 
-    return [...byKb].sort((a, b) => (sortDir === "asc" ? keyOf(a) - keyOf(b) : keyOf(b) - keyOf(a)));
+    return [...byKb].sort((a, b) =>
+      sortDir === "asc" ? keyOf(a) - keyOf(b) : keyOf(b) - keyOf(a)
+    );
   })();
+
+  // 分页加载：默认显示 10 条，点击「显示更多」追加
+  const PAGE_SIZE = 10;
+  const filterSig = `${filterKb}|${sortKey}|${sortDir}`;
+  const [pager, setPager] = useState({ sig: filterSig, count: PAGE_SIZE });
+  if (pager.sig !== filterSig) {
+    // 筛选/排序变化时重置分页（渲染期派生状态重置）
+    setPager({ sig: filterSig, count: PAGE_SIZE });
+  }
+  const visibleCount = pager.sig === filterSig ? pager.count : PAGE_SIZE;
+  const visibleNotes = filteredNotes.slice(0, visibleCount);
+  const hasMoreNotes = visibleNotes.length < filteredNotes.length;
+
+  function loadMoreNotes() {
+    setPager((p) => ({
+      sig: filterSig,
+      count: (p.sig === filterSig ? p.count : PAGE_SIZE) + PAGE_SIZE,
+    }));
+  }
 
   // 各知识库的笔记数（供筛选面板展示）
   const kbCounts = new Map<string, number>();
@@ -302,8 +300,10 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground">时间流笔记</span>
-            <Badge variant="secondary" className="text-xs font-normal">
-              {filteredNotes.length}
+            <Badge variant="secondary" className="text-xs font-normal tabular-nums">
+              {hasMoreNotes
+                ? `${visibleNotes.length} / ${filteredNotes.length}`
+                : filteredNotes.length}
             </Badge>
             <Button
               variant="ghost"
@@ -439,38 +439,7 @@ export default function HomePage() {
         </div>
       </div>
 
-        {/* 标签过滤栏 */}
-        {allTags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <button
-              onClick={() => setSelectedTag("all")}
-              className={`rounded-md px-2.5 py-1 transition-colors ${
-                selectedTag === "all"
-                  ? "bg-foreground text-background font-medium shadow-xs"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              全部 ({allNotes.length})
-            </button>
-            {allTags.slice(0, 10).map((tag) => (
-              <button
-                key={tag.name}
-                onClick={() => setSelectedTag(tag.name)}
-                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors ${
-                  selectedTag === tag.name
-                    ? "bg-foreground text-background font-medium shadow-xs"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <Hash className="size-3 opacity-60" />
-                <span>{tag.name}</span>
-                <span className="text-[10px] opacity-70">({tag.count})</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {filteredNotes.length === 0 ? (
+        {visibleNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-2 rounded-xl border border-dashed">
             <Inbox className="size-8 text-muted-foreground/30" />
             <p className="text-xs font-medium">还没有记录任何笔记</p>
@@ -480,7 +449,7 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {filteredNotes.map((note) => (
+            {visibleNotes.map((note) => (
               <HomeNoteCard
                 key={note.id}
                 note={note}
@@ -491,6 +460,23 @@ export default function HomePage() {
                 onDeleted={fetchNotes}
               />
             ))}
+          </div>
+        )}
+
+        {/* 加载更多 */}
+        {hasMoreNotes && (
+          <div className="flex items-center justify-center py-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-full px-4 text-xs text-muted-foreground shadow-xs hover:text-foreground"
+              onClick={loadMoreNotes}
+            >
+              显示更多
+              <span className="tabular-nums text-[10px] opacity-70">
+                剩余 {filteredNotes.length - visibleNotes.length} 条
+              </span>
+            </Button>
           </div>
         )}
       </div>
@@ -600,44 +586,49 @@ function HomeNoteCard({
         selected ? "border-primary/50 bg-primary/[0.03] shadow-xs" : "bg-card hover:border-foreground/20 hover:shadow-xs"
       }`}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`flex items-center transition-opacity ${
-          selectMode || selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        }`}
-        title={selected ? "取消勾选" : "勾选送入工坊"}
-      >
-        <Checkbox
-          checked={selected}
-          onCheckedChange={onToggleSelect}
-          className="mt-1"
-        />
-      </div>
+      {(selectMode || selected) && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center"
+          title={selected ? "取消勾选" : "勾选送入工坊"}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggleSelect}
+            className="mt-1"
+          />
+        </div>
+      )}
 
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1.5">
         {note.title && (
-          <div className="text-sm font-semibold text-foreground leading-snug">
+          <div className="pr-8 text-lg font-semibold text-foreground leading-snug">
             {note.title}
           </div>
         )}
 
-        <p className="line-clamp-3 font-sans text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap">
+        <p className="line-clamp-3 font-sans text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">
           {note.content}
         </p>
 
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground pt-1">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground pt-0.5">
+          {(() => {
+            const kb = kbs.find((k) => k.id === (note.kbId || "default"));
+            return kb ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/80">
+                <BookOpen className="size-2.5" />
+                {kb.name}
+              </span>
+            ) : null;
+          })()}
           {(note.tags || []).map((t) => (
-            <span key={t} className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground/80">
-              <Tag className="size-2.5" />
+            <span
+              key={t}
+              className="rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] leading-none text-muted-foreground"
+            >
               {t}
             </span>
           ))}
-          {note.autoMeta && (
-            <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 rounded-md">
-              <Sparkles className="size-2.5" />
-              AI 整理
-            </Badge>
-          )}
           <span className="ml-auto text-[11px] flex items-center gap-1 text-muted-foreground/75">
             <Clock className="size-3 text-muted-foreground/50" />
             {formatTime(note.createdAt)}
@@ -645,8 +636,11 @@ function HomeNoteCard({
         </div>
       </div>
 
-      {/* 右上三点操作菜单 */}
-      <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+      {/* 右上三点操作菜单（绝对定位，不挤占正文宽度） */}
+      <div
+        className="absolute right-3 top-3"
+        onClick={(e) => e.stopPropagation()}
+      >
         <Button
           variant="ghost"
           size="icon-xs"

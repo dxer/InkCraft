@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { isAiConfigured, runTidy, tidyContent } from "@/lib/ai";
+import { runTidy } from "@/lib/ai";
 import { extractCardFromDoc } from "@/lib/cards";
-import { extractClaimsFromDoc } from "@/lib/claims";
 import { getDb } from "@/lib/db";
 import { mapNote, type KnowledgeRow } from "@/lib/mappers";
 import { verifyClipKey } from "@/lib/settings";
+import { deriveTitleFromContent } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -51,23 +51,15 @@ export async function POST(request: Request) {
   const kbExists = db.prepare("SELECT 1 FROM knowledge_bases WHERE id = ?").get(kbId);
   if (!kbExists) kbId = "default";
 
+  // 标题优先级：剪藏传入标题 > 正文开头截取 > 模式兜底
+  const title = rawTitle || deriveTitleFromContent(content) || fallbackTitle;
+
   const id = randomUUID();
   db.prepare(
     "INSERT INTO knowledge_items (id, kb_id, document_id, chunk_index, title, content, item_type, category, source_url) VALUES (?, ?, NULL, NULL, ?, ?, 'note', ?, ?)"
-  ).run(id, kbId, rawTitle || fallbackTitle, content, "剪藏", sourceUrl || null);
+  ).run(id, kbId, title, content, "剪藏", sourceUrl || null);
 
-  // 与手动入库一致：配置了 AI 时异步整理标题与标签，不阻塞返回
-  if (isAiConfigured()) {
-    runTidy(
-      tidyContent(content).then((meta) => {
-        if (!meta) return;
-        db.prepare(
-          "UPDATE knowledge_items SET title = COALESCE(?, title), category = COALESCE(?, category), tags = COALESCE(?, tags), auto_meta = 1 WHERE id = ?"
-        ).run(meta.title ?? null, meta.category ?? null, meta.tags ? JSON.stringify(meta.tags) : null, id);
-      })
-    );
-  }
-  runTidy(extractClaimsFromDoc(id, content));
+  // 录入后仅异步萃取八项知识卡片；标签/智鉴均不主动运行，由用户手动触发
   runTidy(extractCardFromDoc(id, content));
 
   const row = db.prepare("SELECT * FROM knowledge_items WHERE id = ?").get(id) as KnowledgeRow;
