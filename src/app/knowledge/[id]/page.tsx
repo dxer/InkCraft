@@ -33,6 +33,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -770,12 +771,17 @@ export default function KnowledgeDetailPage() {
       {/* 独立全屏窗口顶部导航条 */}
       <header className="flex h-12 shrink-0 items-center justify-between border-b px-4 bg-muted/15">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 mr-1">
+          <Link
+            href="/"
+            title="回到首页"
+            aria-label="回到首页"
+            className="flex items-center gap-1.5 mr-1 rounded-md transition-colors hover:opacity-80"
+          >
             <InkCraftMark className="size-7 shrink-0 text-foreground" />
             <span className="font-semibold text-xs text-foreground tracking-tight">
               墨匠
             </span>
-          </div>
+          </Link>
 
           <Button
             variant="ghost"
