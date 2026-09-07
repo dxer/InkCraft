@@ -151,27 +151,27 @@ export default function WorksPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-8 py-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-8 py-6 sm:py-8">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2 text-lg sm:text-xl font-semibold tracking-tight">
             <Library className="size-5 text-muted-foreground" />
             成品库
-            <span className="text-sm font-normal text-muted-foreground">
+            <span className="text-xs sm:text-sm font-normal text-muted-foreground">
               The Shelf
             </span>
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
             作品画廊与多平台成果陈列馆，点击直接进入查看、修改与一键复制。
           </p>
         </div>
         <Button
           onClick={createNewAndOpen}
           size="sm"
-          className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs"
+          className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs self-start sm:self-auto"
         >
           <Plus className="size-3.5" />
-          装配新作品
+          创建新作品
         </Button>
       </header>
 

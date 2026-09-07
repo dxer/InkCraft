@@ -345,36 +345,36 @@ export function WorkshopDesk({
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
       {/* 顶部工具栏（标题、保存状态与全局操作） */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b bg-card/80 px-4 backdrop-blur">
+      <header className="flex flex-col sm:flex-row sm:h-12 shrink-0 sm:items-center sm:justify-between border-b bg-card/80 px-3 sm:px-4 py-2 sm:py-0 backdrop-blur gap-2 sm:gap-0">
         {/* 左侧：标题与保存状态 */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleTitleBlur}
             placeholder="输入创作主题…"
-            className="w-80 truncate rounded-md border-0 bg-transparent px-2 py-1 text-sm font-semibold text-foreground focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+            className="w-full sm:w-80 truncate rounded-md border-0 bg-transparent px-1.5 sm:px-2 py-1 text-xs sm:text-sm font-semibold text-foreground focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
           />
 
           {saving && (
-            <span className="text-[11px] text-muted-foreground animate-pulse flex items-center gap-1">
-              <Loader2 className="size-3 animate-spin" /> 保存中…
+            <span className="text-[10px] sm:text-[11px] text-muted-foreground animate-pulse flex items-center gap-1 shrink-0">
+              <Loader2 className="size-3 animate-spin" /> <span className="hidden sm:inline">保存中…</span>
             </span>
           )}
         </div>
 
         {/* 右侧：成果操作与新建 */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-wrap sm:flex-nowrap">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setVariantsOpen(true)}
             disabled={!canvasContent.trim()}
-            className="gap-1.5 rounded-md text-xs font-medium cursor-pointer"
+            className="gap-1 sm:gap-1.5 rounded-md text-xs font-medium cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
           >
             <Share2 className="size-3.5" />
-            多平台派生
+            <span>多平台派生</span>
             {Object.keys(variants).length > 0 && (
               <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.2 text-[10px]">
                 {Object.keys(variants).length}
@@ -387,11 +387,11 @@ export function WorkshopDesk({
             size="sm"
             onClick={() => setQuoteCardOpen(true)}
             disabled={!canvasContent.trim()}
-            className="gap-1.5 rounded-md text-xs font-medium text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10 cursor-pointer"
+            className="gap-1 sm:gap-1.5 rounded-md text-xs font-medium text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10 cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
             title="生成小红书/社交媒体金句图卡"
           >
             <Sparkles className="size-3.5" />
-            金句图卡
+            <span className="hidden sm:inline">金句图卡</span>
           </Button>
 
           <Button
@@ -399,11 +399,11 @@ export function WorkshopDesk({
             size="sm"
             onClick={handleCopyWeChat}
             disabled={!canvasContent.trim()}
-            className="gap-1.5 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer"
+            className="gap-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
             title="复制符合微信公众号后台规范的内联排版富文本"
           >
             {wechatCopied ? <Check className="size-3.5" /> : <MessageSquare className="size-3.5" />}
-            {wechatCopied ? "已复制公众号富文本" : "公众号排版"}
+            <span className="hidden sm:inline">{wechatCopied ? "已复制公众号富文本" : "公众号排版"}</span>
           </Button>
 
           <Button
@@ -411,11 +411,11 @@ export function WorkshopDesk({
             size="sm"
             onClick={handleCopy}
             disabled={!canvasContent.trim()}
-            className="gap-1.5 rounded-md text-xs cursor-pointer"
+            className="gap-1 sm:gap-1.5 rounded-md text-xs cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
             title="复制 Markdown 原文"
           >
             {copied ? <Check className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
-            {copied ? "已复制" : "Markdown"}
+            <span className="hidden sm:inline">{copied ? "已复制" : "Markdown"}</span>
           </Button>
 
           <Button
@@ -426,21 +426,21 @@ export function WorkshopDesk({
               setSaveToKbOpen(true);
             }}
             disabled={!canvasContent.trim()}
-            className="gap-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            className="gap-1 sm:gap-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
           >
             <Download className="size-3.5" />
-            存知识库
+            <span className="hidden sm:inline">存知识库</span>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setHistoryOpen(true)}
-            className="gap-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            className="gap-1 sm:gap-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer h-7 sm:h-8 px-2 sm:px-3"
             title="查看草稿历史快照与安全回滚"
           >
             <History className="size-3.5 text-amber-500" />
-            快照
+            <span>快照</span>
             {snapshots.length > 0 && (
               <span className="rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 text-[10px] font-mono">
                 {snapshots.length}
@@ -448,16 +448,16 @@ export function WorkshopDesk({
             )}
           </Button>
 
-          <div className="h-4 w-px bg-border mx-1" />
+          <div className="h-4 w-px bg-border mx-0.5 sm:mx-1" />
 
           <Button
             variant="ghost"
             size="sm"
             onClick={onNewProject}
-            className="gap-1 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            className="gap-1 rounded-md text-xs text-muted-foreground hover:text-foreground cursor-pointer h-7 sm:h-8 px-2"
           >
             <Plus className="size-3.5" />
-            新建
+            <span>新建</span>
           </Button>
         </div>
       </header>

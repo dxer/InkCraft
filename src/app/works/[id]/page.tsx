@@ -143,33 +143,33 @@ export default function WorkDetailPage() {
   return (
     <div className="flex flex-col min-h-[100dvh] bg-background">
       {/* 顶部固定导航栏 */}
-      <header className="sticky top-0 z-30 flex h-13 shrink-0 items-center justify-between border-b bg-background/95 px-8 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 flex flex-col sm:flex-row sm:h-13 shrink-0 sm:items-center sm:justify-between border-b bg-background/95 px-4 sm:px-8 py-2.5 sm:py-0 backdrop-blur-md gap-2 sm:gap-4">
+        <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
           <Link
             href="/works"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pr-2 border-r border-border/60"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pr-2 border-r border-border/60 shrink-0"
           >
             <ArrowLeft className="size-3.5" />
-            <span>返回成品库</span>
+            <span>返回</span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm tracking-tight text-foreground truncate max-w-md">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-xs sm:text-sm tracking-tight text-foreground truncate max-w-[180px] sm:max-w-md">
               {work.title}
             </span>
             <StageBadge stage={work.currentStage} />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
           <Button
             size="sm"
             variant="outline"
             asChild
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer"
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer px-2 sm:px-3"
           >
             <Link href={`/workshop?projectId=${encodeURIComponent(workId)}`}>
-              <ExternalLink className="size-3.5" />
+              <ExternalLink className="size-3.5 hidden sm:inline" />
               继续装配
             </Link>
           </Button>
@@ -179,20 +179,20 @@ export default function WorkDetailPage() {
             variant="outline"
             onClick={() => setQuoteCardOpen(true)}
             disabled={!currentText.trim()}
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10 cursor-pointer"
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-semibold rounded-md shadow-xs text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10 cursor-pointer px-2 sm:px-3"
           >
             <Sparkles className="size-3.5" />
-            金句图卡
+            金句卡
           </Button>
 
           <Button
             size="sm"
             variant="outline"
             onClick={() => setSaveToKbOpen(true)}
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer"
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-semibold rounded-md shadow-xs cursor-pointer px-2 sm:px-3"
           >
             <FolderPlus className="size-3.5 text-primary" />
-            沉淀至知识库
+            存知识库
           </Button>
 
           <Button
@@ -200,36 +200,36 @@ export default function WorkDetailPage() {
             variant="outline"
             onClick={handleCopyWeChat}
             disabled={!currentText.trim()}
-            className="h-8 gap-1 text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer"
+            className="h-7 sm:h-8 gap-1 text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer px-2 sm:px-3"
           >
             {wechatCopied ? (
               <Check className="size-3 text-emerald-600" />
             ) : (
               <MessageSquare className="size-3" />
             )}
-            {wechatCopied ? "微信排版已复制" : "公众号排版"}
+            {wechatCopied ? "微信已复制" : "公众号"}
           </Button>
 
           <Button
             size="sm"
             onClick={handleCopyText}
-            className="h-8 gap-1.5 text-xs font-semibold rounded-md shadow-xs bg-foreground text-background hover:bg-foreground/90 cursor-pointer"
+            className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs font-semibold rounded-md shadow-xs bg-foreground text-background hover:bg-foreground/90 cursor-pointer px-2.5 sm:px-3"
           >
             {copied ? (
               <Check className="size-3 text-emerald-500" />
             ) : (
               <Copy className="size-3" />
             )}
-            {copied ? "已复制" : "复制当前稿件"}
+            {copied ? "已复制" : "复制正文"}
           </Button>
         </div>
       </header>
 
       {/* 主体内容区 */}
-      <div className="flex-1 max-w-4xl w-full mx-auto px-8 py-8 space-y-6">
+      <div className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-8 py-5 sm:py-8 space-y-5 sm:space-y-6">
         {/* 平台版本选择 Tab 栏 */}
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b pb-3 gap-2 sm:gap-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {PLATFORMS.map((p) => {
               const isActive = activeTab === p.id;
               const hasContent =
@@ -243,7 +243,7 @@ export default function WorkDetailPage() {
                 <button
                   key={p.id}
                   onClick={() => setActiveTab(p.id)}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-all ${
                     isActive
                       ? "bg-muted text-foreground shadow-2xs font-semibold"
                       : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -264,9 +264,9 @@ export default function WorkDetailPage() {
             })}
           </div>
 
-          <div className="text-xs text-muted-foreground">
+          <div className="text-[11px] sm:text-xs text-muted-foreground">
             <span>{currentText.length} 字</span>
-            <span className="mx-2">·</span>
+            <span className="mx-1.5 sm:mx-2">·</span>
             <span>
               更新于 {new Date(work.updatedAt).toLocaleDateString("zh-CN")}
             </span>

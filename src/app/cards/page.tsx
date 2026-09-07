@@ -183,11 +183,11 @@ export default function CardsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-6 py-8 pb-20">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-6 py-6 sm:py-8 pb-20">
       {/* 顶部横幅 */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-foreground">
+          <h1 className="flex items-center gap-2.5 text-lg sm:text-xl font-semibold tracking-tight text-foreground">
             <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <IdCard className="size-4" />
             </span>
@@ -202,17 +202,17 @@ export default function CardsPage() {
         </div>
 
         {/* 统计指标 */}
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-border/80 bg-card px-3.5 py-1.5 shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 self-start sm:self-auto">
+          <div className="rounded-xl border border-border/80 bg-card px-3 sm:px-3.5 py-1.5 shadow-2xs">
             <div className="text-[10px] text-muted-foreground font-medium">原子卡片</div>
-            <div className="text-sm font-semibold tabular-nums text-foreground">
-              {cards.length} <span className="text-[11px] font-normal text-muted-foreground">张</span>
+            <div className="text-xs sm:text-sm font-semibold tabular-nums text-foreground">
+              {cards.length} <span className="text-[10px] sm:text-[11px] font-normal text-muted-foreground">张</span>
             </div>
           </div>
-          <div className="rounded-xl border border-border/80 bg-card px-3.5 py-1.5 shadow-2xs">
+          <div className="rounded-xl border border-border/80 bg-card px-3 sm:px-3.5 py-1.5 shadow-2xs">
             <div className="text-[10px] text-muted-foreground font-medium">概念标签</div>
-            <div className="text-sm font-semibold tabular-nums text-primary">
-              {allTags.length} <span className="text-[11px] font-normal text-muted-foreground">个</span>
+            <div className="text-xs sm:text-sm font-semibold tabular-nums text-primary">
+              {allTags.length} <span className="text-[10px] sm:text-[11px] font-normal text-muted-foreground">个</span>
             </div>
           </div>
         </div>
@@ -414,17 +414,17 @@ function CardDetailDialog({
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
       <DialogContent
-        className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl"
+        className="gap-0 overflow-hidden rounded-2xl p-0 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-3xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader className="border-b bg-muted/30 px-6 py-4">
-          <div className="flex items-center justify-between gap-3 pr-8">
+        <DialogHeader className="border-b bg-muted/30 px-4 sm:px-6 py-3.5 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 pr-8">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <span className="flex size-7 sm:size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <IdCard className="size-4" />
               </span>
               <div className="min-w-0">
-                <DialogTitle className="text-base font-semibold truncate">
+                <DialogTitle className="text-sm sm:text-base font-semibold truncate">
                   {card.title}
                 </DialogTitle>
                 <DialogDescription className="truncate text-xs text-muted-foreground mt-0.5">
@@ -434,13 +434,13 @@ function CardDetailDialog({
             </div>
 
             {card.tags && card.tags.length > 0 && (
-              <div className="flex shrink-0 flex-wrap gap-1.5">
+              <div className="flex shrink-0 flex-wrap gap-1 sm:gap-1.5">
                 {card.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
+                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs text-secondary-foreground"
                   >
-                    <Tag className="size-3 opacity-60" />
+                    <Tag className="size-2.5 sm:size-3 opacity-60" />
                     {tag}
                   </span>
                 ))}
@@ -449,34 +449,34 @@ function CardDetailDialog({
           </div>
         </DialogHeader>
 
-        <div className="no-scrollbar max-h-[62vh] overflow-y-auto px-6 py-5 space-y-4">
+        <div className="no-scrollbar max-h-[62vh] overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4">
           {/* 自媒体 Hook 专属高亮块 */}
           {card.hook && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
                 <Zap className="size-3.5" />
                 自媒体痛点切入点（Hook / 爆款引子）
               </div>
-              <p className="mt-1.5 text-sm font-medium leading-relaxed text-amber-900 dark:text-amber-100">
+              <p className="mt-1.5 text-xs sm:text-sm font-medium leading-relaxed text-amber-900 dark:text-amber-100">
                 {card.hook}
               </p>
             </div>
           )}
 
           {/* 卡片纯净 Markdown 正文渲染 */}
-          <MdText text={card.body} className="leading-relaxed" />
+          <MdText text={card.body} className="leading-relaxed text-xs sm:text-sm" />
         </div>
 
         {/* 底栏 */}
-        <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-6 py-3.5">
-          <span className="truncate text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 border-t bg-muted/30 px-4 sm:px-6 py-3 sm:py-3.5">
+          <span className="truncate text-[10px] sm:text-[11px] text-muted-foreground">
             {formatCardDate(card.updatedAt)}
           </span>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 rounded-lg text-xs cursor-pointer"
+              className="gap-1.5 rounded-lg text-xs cursor-pointer px-2.5 sm:px-3"
               onClick={handleCopy}
             >
               {copied ? (
@@ -487,17 +487,17 @@ function CardDetailDialog({
               ) : (
                 <>
                   <Copy className="size-3.5" />
-                  复制卡片
+                  复制
                 </>
               )}
             </Button>
             <Button
               size="sm"
-              className="gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+              className="gap-1.5 rounded-lg text-xs font-semibold cursor-pointer px-2.5 sm:px-3"
               onClick={() => onWriteWithCard(card)}
             >
               <PenLine className="size-3.5" />
-              用这张卡写
+              去创作
             </Button>
           </div>
         </div>

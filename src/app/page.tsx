@@ -213,9 +213,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-8 py-8 pb-28">
+    <div className="mx-auto max-w-4xl space-y-6 sm:space-y-8 px-4 sm:px-8 py-6 sm:py-8 pb-24 sm:pb-28">
       {/* 顶部主速记录入框 */}
-      <div className="group rounded-xl border bg-card p-4 shadow-xs transition-all focus-within:border-foreground/30 focus-within:shadow-md">
+      <div className="group rounded-xl border bg-card p-3 sm:p-4 shadow-xs transition-all focus-within:border-foreground/30 focus-within:shadow-md">
         <Textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -226,18 +226,18 @@ export default function HomePage() {
             }
           }}
           placeholder={`记录现在的想法... 支持 Markdown 语法，按 ${modKey} + Enter 秒级入库`}
-          className="min-h-24 resize-y border-0 p-0 shadow-none focus-visible:ring-0 text-sm leading-relaxed placeholder:text-muted-foreground/70"
+          className="min-h-20 sm:min-h-24 resize-y border-0 p-0 shadow-none focus-visible:ring-0 text-sm leading-relaxed placeholder:text-muted-foreground/70"
         />
 
         <div className="mt-3 flex items-center justify-between border-t pt-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-muted-foreground">
             <kbd className="inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px]">
               {modKey} + ↵
             </kbd>
-            <span>快捷入库</span>
+            <span className="hidden sm:inline">快捷入库</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {error && <span className="text-xs text-destructive">{error}</span>}
             {content.length > 0 && (
               <span className="text-xs text-muted-foreground tabular-nums">{content.length} 字</span>
@@ -264,7 +264,7 @@ export default function HomePage() {
       {/* “你还可以” 快捷卡片区 */}
       <div className="space-y-2.5">
         <div className="text-xs font-medium text-muted-foreground">快速导入与剪藏</div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
           {/* 添加链接卡片 */}
           <button
             onClick={() => setLinkOpen(true)}
@@ -483,24 +483,24 @@ export default function HomePage() {
 
       {/* 浮动操作栏：送入工坊 */}
       {selectedNoteIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-full border bg-popover px-4 py-2 shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95">
-          <span className="text-xs font-medium text-foreground">
-            已勾选 <span className="font-bold text-primary">{selectedNoteIds.size}</span> 篇原料
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex max-w-[calc(100vw-2rem)] items-center gap-2 sm:gap-3 rounded-full border bg-popover px-3 sm:px-4 py-2 shadow-2xl backdrop-blur-md animate-in fade-in-0 zoom-in-95">
+          <span className="text-xs font-medium text-foreground whitespace-nowrap">
+            已选 <span className="font-bold text-primary">{selectedNoteIds.size}</span> 篇
           </span>
           <Button
             size="sm"
-            className="h-7 gap-1.5 rounded-full px-3 text-xs font-semibold shadow-xs"
+            className="h-7 gap-1 sm:gap-1.5 rounded-full px-2.5 sm:px-3 text-xs font-semibold shadow-xs whitespace-nowrap"
             onClick={handleSendToWorkshop}
             disabled={sendingToWorkshop}
           >
             <Zap className="size-3.5" />
-            <span>送入装配工坊</span>
-            <ArrowRight className="size-3.5" />
+            <span>送入工坊</span>
+            <ArrowRight className="size-3.5 hidden sm:inline" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs text-muted-foreground hover:text-foreground"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => setSelectedNoteIds(new Set())}
           >
             取消

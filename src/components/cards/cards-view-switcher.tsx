@@ -93,11 +93,12 @@ export function CardsViewSwitcher({
             <span>紧凑清单</span>
           </button>
 
+          {/* 知识图谱按钮：在小屏/手机端标记为桌面端体验或隐藏 */}
           <button
             type="button"
             onClick={() => onViewModeChange("graph")}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all cursor-pointer",
+              "hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all cursor-pointer",
               viewMode === "graph"
                 ? "bg-background text-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground hover:bg-background/50"
