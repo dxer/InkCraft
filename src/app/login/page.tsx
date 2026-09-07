@@ -37,12 +37,16 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState(false);
+  const [firstRun, setFirstRun] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/status")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setAuthed(!!data?.authenticated))
+      .then((data) => {
+        setAuthed(!!data?.authenticated);
+        setFirstRun(data?.configured === false);
+      })
       .catch(() => {});
   }, []);
 
@@ -80,10 +84,12 @@ function LoginForm() {
         <CardHeader className="text-center pb-4">
           <InkCraftMark className="mx-auto mb-3 size-11 text-foreground" />
           <CardTitle className="text-lg font-semibold">
-            墨匠 · 门禁验证
+            墨匠 · {firstRun ? "首次设置" : "门禁验证"}
           </CardTitle>
           <CardDescription className="text-xs">
-            请输入本自部署工坊的访问口令 (ACCESS_PASSWORD)
+            {firstRun
+              ? "首次进入工坊，请设置访问口令以保护你的内容"
+              : "请输入本自部署工坊的访问口令"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -91,10 +97,12 @@ function LoginForm() {
             <div className="space-y-2">
               <Input
                 type="password"
-                aria-label="访问口令"
+                aria-label={firstRun ? "新访问口令" : "访问口令"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="输入访问口令..."
+                placeholder={
+                  firstRun ? "设置至少 4 位的访问口令..." : "输入访问口令..."
+                }
                 className="text-center font-mono text-sm"
                 autoFocus
               />
@@ -110,8 +118,10 @@ function LoginForm() {
               {submitting ? (
                 <>
                   <Loader2 className="size-3.5 animate-spin mr-1" />
-                  验证中...
+                  处理中...
                 </>
+              ) : firstRun ? (
+                "设置口令并进入"
               ) : (
                 "进入内容工坊"
               )}

@@ -4,6 +4,7 @@ import {
   COOKIE_NAME,
   generateSessionToken,
   getAccessPassword,
+  setAccessPassword,
 } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -56,8 +57,24 @@ export async function POST(request: Request) {
   }
 
   const requiredPassword = getAccessPassword();
+
+  // 未配置口令：首次设置模式。校验强度后落库并直接生成会话。
   if (!requiredPassword) {
-    return NextResponse.json({ ok: true, message: "未启用密码门禁" });
+    if (password.length < 4) {
+      return NextResponse.json({ error: "访问口令至少 4 位" }, { status: 400 });
+    }
+    setAccessPassword(password);
+    resetLoginFailures(ip);
+    const token = generateSessionToken(password);
+    const cookieStore = await cookies();
+    cookieStore.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 天有效
+    });
+    return NextResponse.json({ ok: true, firstRun: true });
   }
 
   if (password !== requiredPassword) {

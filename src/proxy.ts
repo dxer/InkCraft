@@ -1,13 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_NAME, generateSessionToken } from "./lib/auth";
+import { COOKIE_NAME, verifySessionToken } from "./lib/auth";
 
 export function proxy(request: NextRequest) {
-  const password = process.env.ACCESS_PASSWORD?.trim();
-  // 未设置密码门禁时全量放行
-  if (!password) {
-    return NextResponse.next();
-  }
-
   const { pathname } = request.nextUrl;
 
   // 放行静态资源、登录页与认证/插件接口。
@@ -24,9 +18,9 @@ export function proxy(request: NextRequest) {
   }
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
-  const expectedToken = generateSessionToken(password);
-  // 只认 Session Cookie；不接受 Authorization 携带原始口令（会落访问日志且绕过登录限流）
-  const isAuthenticated = token === expectedToken;
+  // 有口令则校验 session token；无口令（未配置）时 verifySessionToken 同样返回 false，
+  // 一律要求先到登录页配置，不再直接放行
+  const isAuthenticated = verifySessionToken(token);
 
   if (!isAuthenticated) {
     if (pathname.startsWith("/api/")) {
