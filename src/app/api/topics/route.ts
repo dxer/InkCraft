@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const status = (searchParams.get("status") || "all") as TopicFilterOptions["status"];
   const targetSkill = searchParams.get("targetSkill") || "all";
+  const angleType = searchParams.get("angleType") || "all";
   const search = searchParams.get("search") || "";
   const sourceType = (searchParams.get("sourceType") || "all") as TopicFilterOptions["sourceType"];
   const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined;
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   const topics = getTopicsFromDb({
     status,
     targetSkill,
+    angleType,
     search,
     sourceType,
     limit,

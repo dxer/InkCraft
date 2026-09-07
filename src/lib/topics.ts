@@ -99,6 +99,12 @@ interface TopicRow {
   score: number | null;
   score_tag: string | null;
   outline: string | null;
+  angle_type?: string | null;
+  fingerprint?: string | null;
+  target_audience?: string | null;
+  title_options?: string | null;
+  core_argument?: string | null;
+  outline_structured?: string | null;
   matched_cards: string | null;
   source_note_ids: string | null;
   source_type: string | null;
@@ -125,6 +131,9 @@ function mapTopicRow(row: TopicRow): TopicRepositoryItem {
     [],
   );
   const sourceNoteIds: string[] = parseJsonField(row.source_note_ids, []);
+  const titleOptions: string[] = parseJsonField(row.title_options, []);
+  const outlineStructured: TopicRepositoryItem["outlineStructured"] =
+    parseJsonField(row.outline_structured, []);
 
   const skill = (row.target_skill || "wechat") as PlatformSkillId;
   const def = computeDefaultScore(row.title || "", skill, matchedCards.length);
@@ -142,6 +151,13 @@ function mapTopicRow(row: TopicRow): TopicRepositoryItem {
     score,
     scoreTag,
     outline,
+    angleType: (row.angle_type as TopicRepositoryItem["angleType"]) || "paradox",
+    fingerprint: row.fingerprint || null,
+    targetAudience: row.target_audience || null,
+    titleOptions: titleOptions.length > 0 ? titleOptions : undefined,
+    coreArgument: row.core_argument || row.angle || null,
+    outlineStructured:
+      outlineStructured.length > 0 ? outlineStructured : undefined,
     matchedCards,
     sourceNoteIds,
     sourceType: (row.source_type || "auto") as "auto" | "manual",
@@ -154,7 +170,7 @@ function mapTopicRow(row: TopicRow): TopicRepositoryItem {
 
 /** 获取选题列表 */
 export function getTopicsFromDb(
-  options: TopicFilterOptions = {},
+  options: TopicFilterOptions & { angleType?: string } = {},
 ): TopicRepositoryItem[] {
   const db = getDb();
   const conditions: string[] = [];
@@ -170,15 +186,20 @@ export function getTopicsFromDb(
     params.push(options.targetSkill);
   }
 
+  if (options.angleType && options.angleType !== "all") {
+    conditions.push("angle_type = ?");
+    params.push(options.angleType);
+  }
+
   if (options.sourceType && options.sourceType !== "all") {
     conditions.push("source_type = ?");
     params.push(options.sourceType);
   }
 
   if (options.search && options.search.trim()) {
-    conditions.push("(title LIKE ? OR angle LIKE ?)");
+    conditions.push("(title LIKE ? OR angle LIKE ? OR core_argument LIKE ?)");
     const kw = `%${options.search.trim()}%`;
-    params.push(kw, kw);
+    params.push(kw, kw, kw);
   }
 
   const whereClause =
@@ -187,7 +208,7 @@ export function getTopicsFromDb(
   const offsetClause = options.offset ? `OFFSET ${Number(options.offset)}` : "";
 
   const query = `
-    SELECT id, title, angle, hook, target_skill, score, score_tag, outline, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at
+    SELECT id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at
     FROM topic_repository
     ${whereClause}
     ORDER BY created_at DESC
@@ -277,7 +298,7 @@ export function saveTopicToRepository(
 
   const existing = db
     .prepare(
-      "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?",
+      "SELECT id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at FROM topic_repository WHERE title = ?",
     )
     .get(cleanTitle) as TopicRow | undefined;
 
@@ -299,16 +320,26 @@ export function saveTopicToRepository(
     typeof item.score === "number" && item.score > 0 ? item.score : def.score;
   const scoreTag = item.scoreTag || def.scoreTag;
   const outlineJson = JSON.stringify(item.outline || []);
+  const titleOptionsJson = item.titleOptions
+    ? JSON.stringify(item.titleOptions)
+    : null;
+  const outlineStructuredJson = item.outlineStructured
+    ? JSON.stringify(item.outlineStructured)
+    : null;
   const matchedCardsJson = JSON.stringify(item.matchedCards || []);
   const sourceNoteIdsJson = JSON.stringify(item.sourceNoteIds || []);
   const sourceType = item.sourceType || "manual";
   const status = item.status || "idea";
+  const angleType = item.angleType || "paradox";
+  const fingerprint = item.fingerprint || null;
+  const targetAudience = item.targetAudience || null;
+  const coreArgument = item.coreArgument || item.angle || null;
 
   const insertRes = db
     .prepare(`
     INSERT INTO topic_repository (
-      id, title, angle, hook, target_skill, score, score_tag, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(title) DO NOTHING
   `)
     .run(
@@ -320,6 +351,12 @@ export function saveTopicToRepository(
       score,
       scoreTag,
       outlineJson,
+      angleType,
+      fingerprint,
+      targetAudience,
+      titleOptionsJson,
+      coreArgument,
+      outlineStructuredJson,
       matchedCardsJson,
       sourceNoteIdsJson,
       sourceType,
@@ -331,12 +368,12 @@ export function saveTopicToRepository(
   const inserted =
     (db
       .prepare(
-        "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE id = ?",
+        "SELECT id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at FROM topic_repository WHERE id = ?",
       )
       .get(id) as TopicRow) ||
     (db
       .prepare(
-        "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?",
+        "SELECT id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at FROM topic_repository WHERE title = ?",
       )
       .get(cleanTitle) as TopicRow);
 

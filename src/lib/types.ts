@@ -248,6 +248,15 @@ export interface PipelineProject {
 	}[];
 }
 
+export type TopicRadarAngleType = "paradox" | "intersection" | "deep_dive";
+
+export interface StructuredOutlineStep {
+	step: string;
+	referencedCardId?: string | null;
+	referencedCardTitle?: string | null;
+	guideline: string;
+}
+
 export interface TopicRepositoryItem {
 	id: string;
 	title: string;
@@ -260,11 +269,19 @@ export interface TopicRepositoryItem {
 	depthScore?: number;
 	scoreTag?: string;
 	outline: string[];
+	// 智能选题雷达（Topic Radar）增强字段
+	angleType?: TopicRadarAngleType;
+	fingerprint?: string | null;
+	targetAudience?: string | null;
+	titleOptions?: string[]; // 3选1标题矩阵：痛点焦虑型 / 反常识冲突型 / 实操干货型
+	coreArgument?: string | null; // 2句话核心论点
+	outlineStructured?: StructuredOutlineStep[];
 	matchedCards: {
 		id: string;
 		docId: string;
 		claim: string;
 		noteTitle: string;
+		tag?: string;
 	}[];
 	sourceNoteIds?: string[];
 	sourceType: "auto" | "manual";

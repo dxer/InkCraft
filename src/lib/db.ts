@@ -367,8 +367,9 @@ function runLegacyMigrations(db: Database.Database): void {
 /**
  * 当前 schema 版本号。现有全部建表/种子/加列逻辑整体视为 v1。
  * v2: 解除 knowledge_cards.document_id 的 UNIQUE 约束，支持单篇笔记萃取 1~3 张原子卡片。
+ * v3: 升级 topic_repository 表，支持智能选题雷达（Topic Radar）：3模式碰撞、指纹排重、3选1标题矩阵与结构化大纲。
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function migrate(db: Database.Database): void {
   const current = Number(db.pragma("user_version", { simple: true }) || 0);
@@ -384,6 +385,58 @@ function migrate(db: Database.Database): void {
       db.pragma("user_version = 2");
     })();
   }
+  if (current < 3) {
+    db.transaction(() => {
+      migrateTopicRadarSupport(db);
+      db.pragma("user_version = 3");
+    })();
+  }
+}
+
+/**
+ * v3 迁移：为 topic_repository 扩展智能选题雷达字段与物理指纹索引
+ */
+function migrateTopicRadarSupport(db: Database.Database): void {
+  ensureColumn(
+    db,
+    "topic_repository",
+    "angle_type",
+    "ALTER TABLE topic_repository ADD COLUMN angle_type TEXT DEFAULT 'paradox'",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "fingerprint",
+    "ALTER TABLE topic_repository ADD COLUMN fingerprint TEXT",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "target_audience",
+    "ALTER TABLE topic_repository ADD COLUMN target_audience TEXT",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "title_options",
+    "ALTER TABLE topic_repository ADD COLUMN title_options TEXT",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "core_argument",
+    "ALTER TABLE topic_repository ADD COLUMN core_argument TEXT",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "outline_structured",
+    "ALTER TABLE topic_repository ADD COLUMN outline_structured TEXT",
+  );
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_topic_repo_fingerprint ON topic_repository(fingerprint);
+    CREATE INDEX IF NOT EXISTS idx_topic_repo_angle_type ON topic_repository(angle_type);
+  `);
 }
 
 /**
