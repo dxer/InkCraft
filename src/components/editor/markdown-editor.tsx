@@ -761,11 +761,14 @@ export function MarkdownEditor({
               placeholder={placeholder}
               readOnly={!editable}
               spellCheck={false}
-              className="w-full resize-none py-2 px-0 font-sans text-base leading-relaxed text-foreground bg-transparent outline-none border-none overflow-hidden placeholder:text-muted-foreground/40"
+              className="w-full resize-none py-2 px-0 font-sans text-base leading-relaxed text-foreground bg-transparent outline-none border-none overflow-hidden placeholder:text-muted-foreground/40 break-words whitespace-pre-wrap"
               style={{
                 fontFamily:
                   'var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", sans-serif',
                 lineHeight: "1.85",
+                overflowWrap: "break-word",
+                wordBreak: "break-word",
+                whiteSpace: "pre-wrap",
               }}
             />
           </div>
@@ -773,11 +776,11 @@ export function MarkdownEditor({
           /* 预览模式（默认展示） */
           <div
             ref={previewRef}
-            className="flex-1 py-2 bg-transparent"
+            className="flex-1 py-2 bg-transparent break-words"
           >
             {val.trim() ? (
               <div
-                className="markdown-body"
+                className="markdown-body break-words"
                 dangerouslySetInnerHTML={{ __html: renderedHtml }}
               />
             ) : (

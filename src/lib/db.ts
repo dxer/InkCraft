@@ -26,6 +26,7 @@ function createDb(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   migrate(db);
+  seedCardExtractAgent(db);
   return db;
 }
 
@@ -158,7 +159,8 @@ function runLegacyMigrations(db: Database.Database): void {
       system_prompt TEXT NOT NULL,
       model TEXT,
       temperature REAL DEFAULT 0.7,
-      is_preset INTEGER DEFAULT 0
+      is_preset INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1
     );
 
     -- 4.5 智鉴记录表（AI 对单篇笔记的维度分析沉淀）
@@ -224,11 +226,11 @@ function runLegacyMigrations(db: Database.Database): void {
       DELETE FROM document_extractions WHERE document_id = old.id;
     END;
 
-    -- 4.9 知识卡片表：文章入库后 AI 萃取的知识卡片（绑定单篇笔记）
+    -- 4.9 知识卡片表：文章入库后 AI 萃取的知识卡片（支持单篇笔记萃取 1~3 张原子卡片）
     -- 整卡内容就是一份 markdown 文档（content_md），提取规则/提示词可随时改，无需动表结构
     CREATE TABLE IF NOT EXISTS knowledge_cards (
       id TEXT PRIMARY KEY,
-      document_id TEXT NOT NULL UNIQUE,
+      document_id TEXT NOT NULL,
       content_md TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -316,17 +318,18 @@ function runLegacyMigrations(db: Database.Database): void {
 
   migrateFts(db);
   seedKbs(db);
-  seedPresets(db);
-  seedPlatforms(db);
-  migrateKnowledgeCards(db);
-  migratePipelineCardMode(db);
-  seedPlatformSkillAgents(db);
   ensureColumn(
     db,
     "custom_agents",
     "enabled",
     "ALTER TABLE custom_agents ADD COLUMN enabled INTEGER DEFAULT 1",
   );
+  seedPresets(db);
+  seedPlatforms(db);
+  migrateKnowledgeCards(db);
+  migratePipelineCardMode(db);
+  seedPlatformSkillAgents(db);
+  seedCardExtractAgent(db);
   ensureColumn(
     db,
     "topic_repository",
@@ -362,23 +365,57 @@ function runLegacyMigrations(db: Database.Database): void {
 }
 
 /**
- * 当前 schema 版本号。现有全部建表/种子/加列逻辑整体视为 v1：
- * 全部为 IF NOT EXISTS / INSERT OR IGNORE 幂等语句，未版本化前每次启动全量重放也无副作用；
- * 存量库（user_version=0）首次启动整体重放一次并打标后，不再执行遗留体。
- * —— 未来新迁移：在 migrate() 中追加 `if (current < N)` 块并递增 SCHEMA_VERSION，
- *    不要在 runLegacyMigrations 里继续追加逻辑（新库会重复执行遗留体）。
+ * 当前 schema 版本号。现有全部建表/种子/加列逻辑整体视为 v1。
+ * v2: 解除 knowledge_cards.document_id 的 UNIQUE 约束，支持单篇笔记萃取 1~3 张原子卡片。
  */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 function migrate(db: Database.Database): void {
   const current = Number(db.pragma("user_version", { simple: true }) || 0);
-  if (current < SCHEMA_VERSION) {
+  if (current < 1) {
     db.transaction(() => {
       runLegacyMigrations(db);
-      db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      db.pragma("user_version = 1");
     })();
   }
-  // —— 未来版本化迁移在此追加：if (current < 2) { ...; db.pragma("user_version = 2"); }
+  if (current < 2) {
+    db.transaction(() => {
+      migrateMultiCardsSupport(db);
+      db.pragma("user_version = 2");
+    })();
+  }
+}
+
+/**
+ * v2 迁移：解除 knowledge_cards 的 document_id UNIQUE 约束，支持单篇长文萃取 1~3 张独立原子卡片。
+ */
+function migrateMultiCardsSupport(db: Database.Database): void {
+  const master = db
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_cards'",
+    )
+    .get() as { sql?: string } | undefined;
+  if (master?.sql && /UNIQUE/i.test(master.sql)) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_cards_v2 (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        content_md TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO knowledge_cards_v2 (id, document_id, content_md, created_at, updated_at)
+      SELECT id, document_id, content_md, created_at, updated_at FROM knowledge_cards;
+      DROP TRIGGER IF EXISTS knowledge_cards_cleanup;
+      DROP TABLE knowledge_cards;
+      ALTER TABLE knowledge_cards_v2 RENAME TO knowledge_cards;
+      CREATE INDEX IF NOT EXISTS idx_cards_document ON knowledge_cards(document_id);
+      CREATE TRIGGER IF NOT EXISTS knowledge_cards_cleanup AFTER DELETE ON knowledge_items BEGIN
+        DELETE FROM knowledge_cards WHERE document_id = old.id;
+      END;
+    `);
+  }
+  seedCardExtractAgent(db);
 }
 
 /** 5 大平台创作技能默认预设（可在编辑部 /agents 查看与微调） */
@@ -545,6 +582,84 @@ function migratePipelineCardMode(db: Database.Database): void {
     `INSERT OR IGNORE INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
      VALUES ('agent_brief', 'brief', ?, ?, ?, NULL, 0.2, 1)`,
   ).run(BRIEF_AGENT_NAME, BRIEF_AGENT_PERSONA, BRIEF_AGENT_DEFAULT_PROMPT);
+}
+
+export const CARD_EXTRACT_AGENT_ID = "agent_card_extract";
+export const CARD_EXTRACT_AGENT_NAME = "墨小萃 · 知识卡片萃取师";
+export const CARD_EXTRACT_AGENT_PERSONA =
+  "顶尖知识架构师兼技术认知学者，精通卢曼卡片盒笔记法与原子永久知识卡片提取，面向自媒体产出具备极强痛点切入点（Hook）的自洽卡片";
+export const CARD_EXTRACT_DEFAULT_PROMPT = `你是一名顶级的“知识架构师”兼“技术认知学者”，精通卢曼卡片盒笔记法（Zettelkasten）的原子化哲学与高信息密度知识提炼。
+
+你的任务是：深度剖析用户提供的材料，剥除所有表象修辞、开场白铺垫与空泛口号，将其底层运转机制萃取为 1 到 3 张高信噪比的【原子永久知识卡片（Permanent Notes）】。
+【特别原则】：宁缺毋滥。若材料只讲透了一个核心命题，输出 1 张极品卡片即可，严禁为了凑数而强行拆解出同义反复的碎片。
+
+---
+
+### 🚨 绝对禁止项（Negative Constraints - 触发即视为任务失败）
+1. **严禁博客导语与系列元信息**：正文与标题绝不可出现“本系列第X篇”、“本文介绍了”、“作者在文中提到”、“敬请期待”、“后续我们将拆解”等导言废话。
+2. **严禁万能套话与假大空金句**：严禁出现“通过提炼底层逻辑与输出倒逼输入”、“若缺乏上下文切忌盲目推广”、“提升认知维度”等放在任何领域都能说的无意义套话。
+3. **严禁将系统操作当作行动**：落地行动必须针对“该知识领域本身的实操”，严禁输出“在创作工坊展开为成稿”、“保存卡片以便复习”等系统操作废话。
+4. **劣质内容拒止机制**：如果输入材料纯粹是【开坑预告、目录提纲、情绪抒发、碎碎念、毫无实质论证机制的引言】，必须判定为无实质干货，直接输出 \`SKIP_EMPTY_SUBSTANCE\`，严禁强行硬凑卡片！
+
+---
+
+### 🎯 永久卡片质量准则
+1. **断言式命题标题（Thesis Statement）**：
+   - 标题必须是一个具有明确因果、机制或反常识判断的【完整陈述句】。
+   - 检验标准：遮住所有正文只看标题，读者必须能明确获得一个“可以被证实或证伪”的客观规律，严禁使用“关于X的前置准备”、“谈谈Y”等宽泛短语。
+2. **底层机制透传（Mechanisms over Facts）**：
+   - 解释“为什么会这样”的深层因果链条（前提条件 -> 作用机理 -> 必然结果），使用清晰、精准的大白话，揭示事物运转的底层规律。
+3. **客观边界与认知陷阱**：
+   - 明确指出该规律适用的边界条件（在什么具体场景下会失效？），或者行业大众最常踩的具体认知误区。
+4. **传播钩子（Hook）**：
+   - 提炼一句话能击中从业者或读者“痛点、认知盲区或反直觉现实”的锋利洞见。
+5. **潜在关联概念（Connection Hints）**：
+   - 提取 2~3 个可能与之产生【因果推导】、【对立冲突】或【跨学科同构】的已有知识模型名称，辅助知识库建立网状连接。
+6. **最小可行落地行动（Actionable Instruction）**：
+   - 必须是一条极度具体、带着参数、动作或检验标准的执行指令。
+
+---
+
+### 📦 输出格式规范（机器解析专用，极其重要）
+- 输出格式必须是纯粹的 Markdown + YAML Frontmatter。
+- **YAML 安全转义规则**：所有 \`title\`、\`hook\` 字段的值**必须用双引号严格包裹**；若值内部含有引号，必须改用单引号（防止破坏 YAML 键值对语法导致程序解析崩溃）。
+- 多张卡片之间必须使用严格的三个短横线 \`---\` 独立分割。
+- 严禁在最前面或最后面输出任何客套问候语、确认语或说明文字。
+
+#### 标准输出模板与范例：
+
+---
+title: "Vibe Coding 的核心杠杆不在代码生成，而在前置软件规范（Spec）的边界锁定"
+tags: [VibeCoding, AI编程, 软件工程]
+hook: "很多人以为 Vibe Coding 是靠直觉写代码，最后却变成了靠玄学修 Bug"
+connection_hints: ["上下文窗口污染", "测试驱动开发(TDD)", "自然语言精确度"]
+type: permanent
+---
+
+### 核心机制
+AI 代码模型本质上是概率推断器，其生成准确度极度依赖上下文边界的收敛程度。若没有前置固化的软件规范（Spec），模型在多轮对话中会因上下文膨胀而产生逻辑漂移，导致架构迅速失控。因此，AI 编程的生产力红利并非来自免去思考，而是将原本消耗在语法细节上的脑力，前置转移到了对业务状态、数据字典与边界条件的精确定义上。
+
+### 适用边界与认知误区
+- **失效场景**：单文件极简脚本、一次性探索型 Demo 或无需维护的废弃型代码，过度编写 Spec 反而降低原型验证速度。
+- **典型误区**：误把“提示词越口语化、越短”当成高效，忽视了后期修补隐性逻辑漏洞付出的翻倍代价。
+
+### 落地行动
+在向 AI 下达代码生成指令前，先建立一份只包含「数据结构 Schema」与「异常状态边界表」的独立 Markdown 规范文件，并强制模型在生成前按此 Spec 确认输入输出。`;
+
+export function seedCardExtractAgent(db: Database.Database): void {
+  db.prepare(
+    `INSERT INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset, enabled)
+     VALUES (?, 'extract', ?, ?, ?, NULL, 0.4, 1, 1)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       persona = excluded.persona,
+       system_prompt = CASE WHEN custom_agents.is_preset = 1 THEN excluded.system_prompt ELSE custom_agents.system_prompt END`,
+  ).run(
+    CARD_EXTRACT_AGENT_ID,
+    CARD_EXTRACT_AGENT_NAME,
+    CARD_EXTRACT_AGENT_PERSONA,
+    CARD_EXTRACT_DEFAULT_PROMPT,
+  );
 }
 
 export const BRIEF_AGENT_NAME = "何定音 · 锁题师";

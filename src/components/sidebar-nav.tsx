@@ -88,6 +88,7 @@ export function SidebarNav() {
   return (
     <>
       <aside
+        suppressHydrationWarning
         className={`sticky top-0 hidden h-[100dvh] shrink-0 flex-col border-r bg-background transition-[width] duration-200 ease-in-out md:flex ${
           isCollapsed ? "w-14" : "w-56"
         }`}

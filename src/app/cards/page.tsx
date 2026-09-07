@@ -1,19 +1,18 @@
 "use client";
 
 import {
-  ArrowRight,
   Check,
   Compass,
   Copy,
   FileText,
-  Grip,
   IdCard,
   MessageSquare,
   PenLine,
-  Search,
   Share2,
   Sparkles,
+  Tag,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -27,54 +26,64 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { parseCardFields } from "@/lib/card-md";
+import { extractFrontmatter, parseCardFields } from "@/lib/card-md";
 import { PLATFORM_SKILLS, type KnowledgeCard, type PlatformSkillId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-interface CardListItem extends KnowledgeCard {
-  note_title: string | null;
-  updated_at: string;
-}
-
-/** 从整卡 markdown 中提取画廊预览文本：lead 为首个正文行（观点），rest 为次行 */
-function mdPreview(md: string): { lead: string; rest: string } {
-  const isHeading = (l: string) => /^#{1,6}\s/.test(l);
-  const plain = (l: string) =>
-    l.replace(/^>\s*/, "").replace(/^[-*+]\s+\[[ xX]\]\s*/, "").replace(/^[-*+]\s+/, "").replace(/\*\*/g, "").trim();
-  let lead = "";
-  let rest = "";
-  for (const raw of md.split("\n")) {
-    const line = raw.trim();
-    if (!line || isHeading(line)) continue;
-    const text = plain(line);
-    if (!text || text === "—") continue;
-    if (!lead) {
-      lead = text;
-      continue;
-    }
-    rest = text;
-    break;
-  }
-  return { lead: lead || "空卡片", rest };
-}
-
-/** 卡片日期短格式：2026/9/6 */
-function cardDate(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : `萃取于 ${d.toLocaleDateString("zh-CN")}`;
-}
+import {
+  formatCardDate,
+  parseCardItem,
+  type CardListItem,
+  type ParsedCardItem,
+} from "@/components/cards/card-utils";
+import {
+  CardsViewSwitcher,
+  type CardViewMode,
+} from "@/components/cards/cards-view-switcher";
+import { CardsMasonryView } from "@/components/cards/cards-masonry-view";
+import { CardsCompactTableView } from "@/components/cards/cards-compact-table-view";
+import { CardsGraphView } from "@/components/cards/cards-graph-view";
+import { CardsPearlChainBar } from "@/components/cards/cards-pearl-chain-bar";
 
 export default function CardsPage() {
   const [cards, setCards] = useState<CardListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<CardListItem | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<CardListItem | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<CardViewMode>("masonry");
+
+  // 串珍珠多选路径 (Pearl Chaining)
+  const [pearlChain, setPearlChain] = useState<ParsedCardItem[]>([]);
+
+  // 交互弹窗状态
+  const [selectedCard, setSelectedCard] = useState<ParsedCardItem | null>(null);
+  const [writeCard, setWriteCard] = useState<ParsedCardItem | null>(null);
+  const [multiCardsWrite, setMultiCardsWrite] = useState<ParsedCardItem[] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ParsedCardItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
+
+  // 初始化读取本地视图偏好
+  useEffect(() => {
+    try {
+      const savedMode = localStorage.getItem("inkcraft_cards_view_mode") as CardViewMode;
+      if (savedMode && ["masonry", "compact", "graph"].includes(savedMode)) {
+        setViewMode(savedMode);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: CardViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("inkcraft_cards_view_mode", mode);
+    } catch {
+      // ignore
+    }
+  };
 
   const fetchCards = useCallback(async () => {
     try {
@@ -92,6 +101,69 @@ export default function CardsPage() {
     fetchCards();
   }, [fetchCards]);
 
+  // 解析全部卡片为标准原子卡对象
+  const parsedCards = useMemo(() => {
+    return cards.map(parseCardItem);
+  }, [cards]);
+
+  // 收集所有标签
+  const allTags = useMemo(() => {
+    const tagMap = new Map<string, number>();
+    parsedCards.forEach((c) => {
+      c.tags.forEach((t) => {
+        tagMap.set(t, (tagMap.get(t) || 0) + 1);
+      });
+    });
+    return Array.from(tagMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map((entry) => entry[0]);
+  }, [parsedCards]);
+
+  // 过滤卡片列表
+  const filteredCards = useMemo(() => {
+    let result = parsedCards;
+
+    // 标签筛选
+    if (selectedTag) {
+      result = result.filter((c) => c.tags.includes(selectedTag));
+    }
+
+    // 关键词搜索
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.hook.toLowerCase().includes(q) ||
+          c.noteTitle.toLowerCase().includes(q) ||
+          c.tags.some((t) => t.toLowerCase().includes(q)) ||
+          c.body.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [parsedCards, selectedTag, search]);
+
+  // 串珍珠操作
+  const togglePearlChain = (card: ParsedCardItem) => {
+    setPearlChain((prev) => {
+      const exists = prev.some((c) => c.id === card.id);
+      if (exists) {
+        return prev.filter((c) => c.id !== card.id);
+      }
+      return [...prev, card];
+    });
+  };
+
+  const removePearl = (cardId: string) => {
+    setPearlChain((prev) => prev.filter((c) => c.id !== cardId));
+  };
+
+  const clearPearlChain = () => {
+    setPearlChain([]);
+  };
+
+  // 删除卡片
   async function confirmDeleteCard() {
     if (!pendingDelete || deleting) return;
     setDeleting(true);
@@ -100,7 +172,8 @@ export default function CardsPage() {
       const res = await fetch(`/api/cards/${pendingDelete.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setCards((prev) => prev.filter((c) => c.id !== pendingDelete.id));
-      setSelected((prev) => (prev?.id === pendingDelete.id ? null : prev));
+      setPearlChain((prev) => prev.filter((c) => c.id !== pendingDelete.id));
+      if (selectedCard?.id === pendingDelete.id) setSelectedCard(null);
       setPendingDelete(null);
     } catch {
       setDeleteError(true);
@@ -109,147 +182,158 @@ export default function CardsPage() {
     }
   }
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return cards;
-    return cards.filter(
-      (c) =>
-        c.content_md.toLowerCase().includes(q) ||
-        (c.note_title || "").toLowerCase().includes(q),
-    );
-  }, [cards, search]);
-
-  // 主索引卡：取最新一张
-  const hero = filtered[0];
-
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-8 py-8">
+    <div className="mx-auto max-w-6xl space-y-6 px-6 py-8 pb-20">
       {/* 顶部横幅 */}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight text-foreground">
             <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <IdCard className="size-4" />
             </span>
-            卡片库
-            <span className="text-sm font-normal text-muted-foreground">
-              The Card Deck
+            知识卡片库
+            <span className="text-xs font-normal text-muted-foreground">
+              Permanent Notes Gallery
             </span>
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            文章入库后，AI 把每篇萃成一张「能出货」的八项知识卡片。
+          <p className="mt-1 text-xs text-muted-foreground">
+            基于卢曼卡片盒与自媒体传播学：自洽原子命题 · 痛点切入 Hook · 知识网络拓扑。
           </p>
+        </div>
+
+        {/* 统计指标 */}
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-border/80 bg-card px-3.5 py-1.5 shadow-2xs">
+            <div className="text-[10px] text-muted-foreground font-medium">原子卡片</div>
+            <div className="text-sm font-semibold tabular-nums text-foreground">
+              {cards.length} <span className="text-[11px] font-normal text-muted-foreground">张</span>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/80 bg-card px-3.5 py-1.5 shadow-2xs">
+            <div className="text-[10px] text-muted-foreground font-medium">概念标签</div>
+            <div className="text-sm font-semibold tabular-nums text-primary">
+              {allTags.length} <span className="text-[11px] font-normal text-muted-foreground">个</span>
+            </div>
+          </div>
         </div>
       </header>
 
-      {/* 萃取统计 */}
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-muted-foreground">AI 萃取统计</span>
-          <span className="tabular-nums text-foreground">
-            已入卡 {cards.length} 张
-          </span>
-        </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          卡片由入库时的 AI 萃取异步生成；在笔记内容页可随时手动「重新生成」。
-        </p>
-      </div>
+      {/* 搜索与视图切换控制条 */}
+      <CardsViewSwitcher
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
+        search={search}
+        onSearchChange={setSearch}
+        allTags={allTags}
+        selectedTag={selectedTag}
+        onSelectTag={setSelectedTag}
+        totalCards={parsedCards.length}
+        filteredCount={filteredCards.length}
+      />
 
-      {/* 搜索 */}
-      <div className="flex items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="搜索卡片"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索观点、适用场景、来源..."
-            className="pl-9 text-xs rounded-md"
-          />
-        </div>
-      </div>
-
+      {/* 主展示区 */}
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div
               key={i}
-              className="h-56 animate-pulse rounded-xl border bg-muted/40"
+              className="h-52 animate-pulse rounded-2xl border border-border/60 bg-muted/40"
             />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed py-16 text-center">
-          <IdCard className="mx-auto size-8 text-muted-foreground/40" />
-          <p className="mt-2 text-sm font-medium">
-            {cards.length === 0 ? "还没有卡片" : "没有匹配的卡片"}
+      ) : filteredCards.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/80 py-16 text-center bg-card/50">
+          <IdCard className="mx-auto size-9 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-medium text-foreground">
+            {cards.length === 0 ? "还没有提炼知识卡片" : "没有找到匹配的卡片"}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
             {cards.length === 0
-              ? "去知识库写一条笔记或剪藏一篇文章，入库后会自动萃成卡片。"
-              : "换一个关键词试试。"}
+              ? "前往知识库录入笔记或剪藏文章，后台会自动蒸馏为高价值原子卡片。"
+              : "尝试更换关键词或清除标签筛选。"}
           </p>
+          {selectedTag && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedTag(null)}
+              className="mt-4 text-xs rounded-lg cursor-pointer"
+            >
+              清除标签 #{selectedTag}
+            </Button>
+          )}
         </div>
       ) : (
-        /* 双栏画廊：左大索引卡 + 右次要卡 */
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-          {/* 左：主索引卡 */}
-          {hero && (
-            <div className="group relative">
-              <button
-                onClick={() => setSelected(hero)}
-                className="group flex h-full w-full flex-col justify-between rounded-2xl border bg-card p-6 text-left shadow-sm transition-all hover:border-primary/50 hover:shadow-md cursor-pointer overflow-hidden"
-              >
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span className="truncate pr-3">《{hero.note_title}》</span>
-                  </div>
-                  <p className="text-xl font-semibold leading-relaxed tracking-tight text-foreground">
-                    {mdPreview(hero.content_md).lead}
-                  </p>
-                  <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-                    {mdPreview(hero.content_md).rest}
-                  </p>
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t pt-3">
-                  <span className="inline-flex items-center gap-1 text-xs text-primary">
-                    查看完整卡片
-                    <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                  </span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {cardDate(hero.updated_at)}
-                  </span>
-                </div>
-              </button>
-              <DeleteCardButton
-                onClick={() => setPendingDelete(hero)}
-                deleting={deleting}
-              />
-            </div>
+        /* 根据当前模式渲染三种视图 */
+        <div className="transition-opacity duration-200">
+          {viewMode === "masonry" && (
+            <CardsMasonryView
+              cards={filteredCards}
+              onSelectCard={setSelectedCard}
+              onWriteWithCard={setWriteCard}
+              onDeleteCard={setPendingDelete}
+              onSelectTag={setSelectedTag}
+              selectedTag={selectedTag}
+            />
           )}
 
-          {/* 右：次要卡列 */}
-          <div className="grid gap-3">
-            {filtered.slice(1, 5).map((c) => (
-              <MiniCard
-                key={c.id}
-                card={c}
-                deleting={false}
-                onClick={() => setSelected(c)}
-                onDelete={() => setPendingDelete(c)}
-              />
-            ))}
-          </div>
+          {viewMode === "compact" && (
+            <CardsCompactTableView
+              cards={filteredCards}
+              onSelectCard={setSelectedCard}
+              onWriteWithCard={setWriteCard}
+              onDeleteCard={setPendingDelete}
+              onSelectTag={setSelectedTag}
+              selectedTag={selectedTag}
+            />
+          )}
+
+          {viewMode === "graph" && (
+            <CardsGraphView
+              cards={filteredCards}
+              onSelectCard={setSelectedCard}
+              onWriteWithCard={setWriteCard}
+              onSelectTag={setSelectedTag}
+              selectedTag={selectedTag}
+              pearlChain={pearlChain}
+              onTogglePearlChain={togglePearlChain}
+            />
+          )}
         </div>
       )}
 
-      {/* 完整卡片详情弹窗 */}
-      <CardDetailDialog
-        card={selected}
-        onOpenChange={(open) => !open && setSelected(null)}
+      {/* 底部串珍珠路径成文浮动栏 */}
+      <CardsPearlChainBar
+        pearlChain={pearlChain}
+        onRemovePearl={removePearl}
+        onClearPearlChain={clearPearlChain}
+        onComposePearlChain={(chain) => setMultiCardsWrite(chain)}
       />
 
-      {/* 删除确认弹框（应用内，不用系统 confirm） */}
+      {/* 瀑布/列表模式下的卡片完整详情弹窗 */}
+      <CardDetailDialog
+        card={selectedCard}
+        onOpenChange={(open) => !open && setSelectedCard(null)}
+        onWriteWithCard={(card) => {
+          setSelectedCard(null);
+          setWriteCard(card);
+        }}
+      />
+
+      {/* 单卡 / 多卡二次创作确认弹窗 */}
+      <WriteWithCardDialog
+        card={writeCard}
+        multiCards={multiCardsWrite}
+        open={!!writeCard || !!multiCardsWrite}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWriteCard(null);
+            setMultiCardsWrite(null);
+          }
+        }}
+      />
+
+      {/* 删除确认弹框 */}
       <Dialog
         open={!!pendingDelete}
         onOpenChange={(open) => !open && !deleting && setPendingDelete(null)}
@@ -263,12 +347,18 @@ export default function CardsPage() {
               <span className="flex size-8 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
                 <Trash2 className="size-4" />
               </span>
-              删除这张卡片？
+              删除这张原子卡片？
             </DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed">
-              《{pendingDelete?.note_title || "未命名笔记"}》
+            <DialogDescription className="text-xs leading-relaxed pt-1">
+              《{pendingDelete?.noteTitle || "未命名笔记"}》
               <br />
-              源笔记不受影响，之后可随时在笔记页重新萃取。
+              <span className="text-foreground/80 font-medium">
+                {pendingDelete?.title}
+              </span>
+              <br />
+              <span className="text-muted-foreground mt-1 inline-block">
+                源笔记不受影响，后续可在笔记详情页随时重新萃取。
+              </span>
             </DialogDescription>
           </DialogHeader>
           {deleteError && (
@@ -276,11 +366,11 @@ export default function CardsPage() {
               删除失败，请稍后重试。
             </p>
           )}
-          <div className="flex justify-end gap-2 pt-1">
+          <DialogFooter className="flex justify-end gap-2 pt-2">
             <Button
               variant="outline"
               size="sm"
-              className="rounded-md"
+              className="rounded-md text-xs cursor-pointer"
               disabled={deleting}
               onClick={() => setPendingDelete(null)}
             >
@@ -288,94 +378,35 @@ export default function CardsPage() {
             </Button>
             <Button
               size="sm"
-              className="rounded-md bg-destructive font-semibold text-white hover:bg-destructive/90"
+              className="rounded-md bg-destructive text-xs font-semibold text-white hover:bg-destructive/90 cursor-pointer"
               disabled={deleting}
               onClick={() => void confirmDeleteCard()}
             >
               {deleting ? "删除中…" : "确认删除"}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-/** 悬停出现的删除按钮（卡片右上角；父容器需带 group 类） */
-function DeleteCardButton({
-  onClick,
-  deleting,
-}: {
-  onClick: () => void;
-  deleting: boolean;
-}) {
-  return (
-    <button
-      aria-label="删除卡片"
-      title="删除卡片"
-      disabled={deleting}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="absolute top-3 right-3 z-10 flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 shadow-xs backdrop-blur transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 disabled:pointer-events-none"
-    >
-      <Trash2 className={cn("size-3.5", deleting && "animate-pulse")} />
-    </button>
-  );
-}
-
-function MiniCard({
-  card,
-  onClick,
-  onDelete,
-  deleting,
-}: {
-  card: CardListItem;
-  onClick: () => void;
-  onDelete: () => void;
-  deleting: boolean;
-}) {
-  return (
-    <div className="group relative">
-      <button
-        onClick={onClick}
-        className="flex w-full items-start gap-3 rounded-xl border bg-card p-4 text-left transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer pr-9"
-      >
-        <Grip className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-            {mdPreview(card.content_md).lead}
-          </p>
-          <p className="line-clamp-1 text-[11px] text-muted-foreground">
-            《{card.note_title}》
-            {card.updated_at && (
-              <span className="ml-1.5 text-muted-foreground/70">
-                · {new Date(card.updated_at).toLocaleDateString("zh-CN")}
-              </span>
-            )}
-          </p>
-        </div>
-      </button>
-      <DeleteCardButton onClick={onDelete} deleting={deleting} />
-    </div>
-  );
-}
-
+/** 完整卡片详情弹窗 */
 function CardDetailDialog({
   card,
   onOpenChange,
+  onWriteWithCard,
 }: {
-  card: CardListItem | null;
+  card: ParsedCardItem | null;
   onOpenChange: (open: boolean) => void;
+  onWriteWithCard: (card: ParsedCardItem) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [writeOpen, setWriteOpen] = useState(false);
   if (!card) return null;
-  const current = card;
 
   function handleCopy() {
-    navigator.clipboard.writeText(current.content_md);
+    if (!card) return;
+    navigator.clipboard.writeText(card.raw.content_md);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -383,44 +414,69 @@ function CardDetailDialog({
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
       <DialogContent
-        className="gap-0 overflow-hidden rounded-xl p-0 sm:max-w-3xl"
+        className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader className="border-b bg-muted/40 px-5 py-3.5">
-          <div className="flex items-center gap-2.5 pr-8">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <IdCard className="size-4" />
-            </span>
-            <div className="min-w-0">
-              <DialogTitle className="text-sm font-semibold">
-                知识卡片
-              </DialogTitle>
-              <DialogDescription className="truncate text-xs">
-                《{card.note_title || "未命名笔记"}》
-              </DialogDescription>
+        <DialogHeader className="border-b bg-muted/30 px-6 py-4">
+          <div className="flex items-center justify-between gap-3 pr-8">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <IdCard className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <DialogTitle className="text-base font-semibold truncate">
+                  {card.title}
+                </DialogTitle>
+                <DialogDescription className="truncate text-xs text-muted-foreground mt-0.5">
+                  来源笔记：《{card.noteTitle}》
+                </DialogDescription>
+              </div>
             </div>
+
+            {card.tags && card.tags.length > 0 && (
+              <div className="flex shrink-0 flex-wrap gap-1.5">
+                {card.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground"
+                  >
+                    <Tag className="size-3 opacity-60" />
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </DialogHeader>
 
-        {/* 整卡内容就是一份 markdown 文档，直接渲染 */}
-        <MdText
-          text={card.content_md}
-          className="no-scrollbar max-h-[62vh] overflow-y-auto px-6 py-5"
-        />
+        <div className="no-scrollbar max-h-[62vh] overflow-y-auto px-6 py-5 space-y-4">
+          {/* 自媒体 Hook 专属高亮块 */}
+          {card.hook && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                <Zap className="size-3.5" />
+                自媒体痛点切入点（Hook / 爆款引子）
+              </div>
+              <p className="mt-1.5 text-sm font-medium leading-relaxed text-amber-900 dark:text-amber-100">
+                {card.hook}
+              </p>
+            </div>
+          )}
 
-        {/* 底栏：萃取日期 | 复制 + 送去工坊二次创作 */}
-        <div className="flex items-center justify-between gap-3 border-t bg-muted/40 px-5 py-3">
+          {/* 卡片纯净 Markdown 正文渲染 */}
+          <MdText text={card.body} className="leading-relaxed" />
+        </div>
+
+        {/* 底栏 */}
+        <div className="flex items-center justify-between gap-3 border-t bg-muted/30 px-6 py-3.5">
           <span className="truncate text-[11px] text-muted-foreground">
-            萃取于{" "}
-            {card.updated_at
-              ? new Date(card.updated_at).toLocaleDateString("zh-CN")
-              : "—"}
+            {formatCardDate(card.updatedAt)}
           </span>
           <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 rounded-md text-xs"
+              className="gap-1.5 rounded-lg text-xs cursor-pointer"
               onClick={handleCopy}
             >
               {copied ? (
@@ -437,44 +493,55 @@ function CardDetailDialog({
             </Button>
             <Button
               size="sm"
-              className="gap-1.5 rounded-md text-xs font-semibold"
-              onClick={() => setWriteOpen(true)}
+              className="gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
+              onClick={() => onWriteWithCard(card)}
             >
               <PenLine className="size-3.5" />
               用这张卡写
             </Button>
           </div>
         </div>
-
-        {/* 二次创作确认层：冻结主张快照，确认后建项目进锁题 */}
-        <WriteWithCardDialog
-          card={current}
-          open={writeOpen}
-          onOpenChange={setWriteOpen}
-        />
       </DialogContent>
     </Dialog>
   );
 }
 
-/** 用这张卡写：确认层 + 建项目（卡片模式，从锁题进入） */
+/** 用这张卡写 / 串珍珠多卡开写：确认层 + 建项目 */
 function WriteWithCardDialog({
   card,
+  multiCards,
   open,
   onOpenChange,
 }: {
-  card: CardListItem;
+  card: ParsedCardItem | null;
+  multiCards?: ParsedCardItem[] | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const fields = useMemo(() => parseCardFields(card.content_md), [card.content_md]);
-  // 原卡主张多长就放多长：不截断，用户可自由增删
-  const [claim, setClaim] = useState(fields.claim);
+
+  // 单卡时解析 fields
+  const singleFields = useMemo(() => {
+    return card ? parseCardFields(card.raw.content_md) : null;
+  }, [card]);
+
+  // 组合多卡时的复合主张与标题
+  const defaultClaim = useMemo(() => {
+    if (multiCards && multiCards.length > 0) {
+      return multiCards.map((c, i) => `${i + 1}. ${c.title}`).join("\n");
+    }
+    return singleFields?.claim || "";
+  }, [multiCards, singleFields]);
+
+  const [claim, setClaim] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<PlatformSkillId>("wechat");
   const [agents, setAgents] = useState<{ id: string; name: string; stage: string; persona: string | null }[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setClaim(defaultClaim);
+  }, [defaultClaim]);
 
   useEffect(() => {
     if (open) {
@@ -501,11 +568,9 @@ function WriteWithCardDialog({
     }
   }, [open, selectedSkill]);
 
-  const boundary =
-    [fields.applicable, fields.notApplicable]
-      .filter(Boolean)
-      .map((s, i) => (i === 0 ? `适用：${s}` : `反适用：${s}`))
-      .join("；") || null;
+  const isMulti = !!(multiCards && multiCards.length > 0);
+  const activeCards = multiCards && multiCards.length > 0 ? multiCards : card ? [card] : [];
+  if (activeCards.length === 0) return null;
 
   async function confirmWrite() {
     if (creating) return;
@@ -516,19 +581,25 @@ function WriteWithCardDialog({
     }
     setCreating(true);
     setError(null);
+
+    const primaryCard = activeCards[0];
+    const sourceTitles = Array.from(new Set(activeCards.map((c) => c.noteTitle))).join(" / ");
+
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cardId: card.id,
+          cardId: primaryCard.id,
           targetSkill: selectedSkill,
           claimSnapshot: {
             claim: finalClaim,
-            noteTitle: card.note_title,
-            boundary,
-            cut: fields.cut || null,
-            confidence: fields.sourceShape || null,
+            noteTitle: sourceTitles,
+            boundary: isMulti
+              ? `串联节点: ${activeCards.map((c) => c.title).join(" ➔ ")}`
+              : singleFields?.applicable || null,
+            cut: isMulti ? `多卡片拓扑串联大纲 (${activeCards.length}个断言)` : singleFields?.cut || null,
+            confidence: "high",
           },
         }),
       });
@@ -540,18 +611,6 @@ function WriteWithCardDialog({
       setCreating(false);
     }
   }
-
-  const rows: { label: string; value: string | null }[] = [
-    ...(fields.tension
-      ? [
-          { label: "惯性误区", value: fields.tension.misconception || null },
-          { label: "破局逻辑", value: fields.tension.solution || null },
-        ]
-      : []),
-    { label: "边界约束", value: boundary },
-    { label: "破题切口", value: fields.cut || null },
-    { label: "金句原句", value: fields.quote || null },
-  ];
 
   const getSkillIcon = (id: string) => {
     switch (id) {
@@ -580,18 +639,23 @@ function WriteWithCardDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-xl rounded-xl p-5"
+        className="sm:max-w-xl rounded-2xl p-5"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold">选择技能去创作</DialogTitle>
+          <DialogTitle className="text-base font-semibold flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            {isMulti ? `串珍珠成文 (${activeCards.length}个拓扑节点)` : "选择技能去创作"}
+          </DialogTitle>
           <DialogDescription className="text-xs">
-            选择目标平台创作技能，AI 将直接结合卡片论点与知识库素材一步成稿。
+            {isMulti
+              ? "已将选中的拓扑路径串联为复合命题大纲，AI 将融合多个断言一步成稿。"
+              : "选择目标平台创作技能，AI 将直接结合卡片断言与知识库素材一步成稿。"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3.5 py-1">
-          {/* 创作技能选择磁贴（仅展示已启用的技能） */}
+          {/* 创作技能选择磁贴 */}
           <div className="space-y-1.5">
             <span className="text-xs font-medium text-foreground">目标创作技能</span>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -616,7 +680,7 @@ function WriteWithCardDialog({
                     type="button"
                     onClick={() => setSelectedSkill(skill.id)}
                     className={cn(
-                      "flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-all cursor-pointer",
+                      "flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-all cursor-pointer",
                       active
                         ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary/20"
                         : "border-border/70 bg-card hover:border-border hover:bg-muted/30"
@@ -639,35 +703,29 @@ function WriteWithCardDialog({
 
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-medium text-foreground">卡片核心主张（可微调）</span>
+              <span className="text-xs font-medium text-foreground">
+                {isMulti ? "复合命题路径（可自由调整顺序与要点）" : "卡片核心主张（可微调）"}
+              </span>
               <span className="text-[11px] tabular-nums text-muted-foreground">{claim.length} 字</span>
             </div>
             <Textarea
               value={claim}
               onChange={(e) => setClaim(e.target.value)}
-              rows={2}
-              className="min-h-0 resize-none rounded-md text-xs leading-relaxed"
+              rows={isMulti ? 4 : 2}
+              className="min-h-0 resize-none rounded-xl text-xs leading-relaxed font-mono"
             />
           </div>
 
-          {rows
-            .filter((r) => r.value)
-            .map((r) => (
-              <div key={r.label} className="rounded-lg bg-muted/40 px-3 py-1.5">
-                <span className="text-[11px] font-medium text-muted-foreground">{r.label}</span>
-                <p className="mt-0.5 text-xs leading-relaxed text-foreground">{r.value}</p>
-              </div>
-            ))}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
         <DialogFooter className="border-t pt-3">
-          <Button variant="outline" size="sm" className="rounded-md text-xs" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="rounded-lg text-xs cursor-pointer" onClick={() => onOpenChange(false)}>
             取消
           </Button>
           <Button
             size="sm"
-            className="gap-1.5 rounded-md text-xs font-semibold"
+            className="gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
             disabled={creating || !claim.trim()}
             onClick={() => void confirmWrite()}
           >
@@ -680,7 +738,7 @@ function WriteWithCardDialog({
   );
 }
 
-/** 卡片字段 markdown 渲染：与编辑器预览同源（marked），直接输出阅读排版 */
+/** 卡片字段 markdown 渲染：与编辑器预览同源（marked） */
 function MdText({ text, className }: { text: string; className?: string }) {
   const html = useMemo(() => {
     try {

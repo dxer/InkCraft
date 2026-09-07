@@ -45,8 +45,9 @@ import { MoveNotesDialog } from "../move-notes-dialog";
 import { NewKbDialog } from "../new-kb-dialog";
 import { NoteListItem } from "../note-list-item";
 import { SproutPanel } from "../sprout-panel";
+import { NoteCardsPanel } from "../note-cards-panel";
 import type { SproutResult } from "@/lib/sprout";
-import type { KnowledgeBase, NoteItem } from "@/lib/types";
+import type { KnowledgeBase, KnowledgeCard, NoteItem } from "@/lib/types";
 
 export default function KnowledgeDetailPage() {
   const params = useParams();
@@ -101,7 +102,9 @@ export default function KnowledgeDetailPage() {
   const [sproutLoading, setSproutLoading] = useState(false);
   const [reSprouting, setReSprouting] = useState(false);
 
-  // 知识卡片：生成/重新生成状态与结果提示
+  // 对应笔记的原子知识卡片列表与加载状态
+  const [noteCards, setNoteCards] = useState<KnowledgeCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
   const [cardExtracting, setCardExtracting] = useState(false);
   const [cardResult, setCardResult] = useState<string | null>(null);
 
@@ -267,6 +270,31 @@ export default function KnowledgeDetailPage() {
     }
   }
 
+  // 加载当前选中笔记的知识卡片列表
+  const fetchNoteCards = useCallback(async (docId: string) => {
+    if (!docId) return;
+    setCardsLoading(true);
+    try {
+      const res = await fetch(`/api/cards?doc_id=${docId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setNoteCards(data.cards || []);
+      }
+    } catch (err) {
+      console.error("加载笔记对应卡片失败:", err);
+    } finally {
+      setCardsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedNote?.id) {
+      fetchNoteCards(selectedNote.id);
+    } else {
+      setNoteCards([]);
+    }
+  }, [selectedNote?.id, fetchNoteCards]);
+
   // 生成 / 重新生成知识卡片（入库时已自动萃取，这里可手动刷新）
   async function handleGenerateCard() {
     if (!selectedNote || cardExtracting) return;
@@ -279,11 +307,12 @@ export default function KnowledgeDetailPage() {
         body: JSON.stringify({ docIds: [selectedNote.id] }),
       });
       const data = await res.json().catch(() => null);
-      setCardResult(
-        res.ok
-          ? `卡片已${data?.reextracted ? "重新生成" : "生成"}`
-          : "卡片生成失败，请稍后重试",
-      );
+      if (res.ok) {
+        setCardResult(`卡片已${data?.reextracted ? "重新生成" : "生成"}`);
+        fetchNoteCards(selectedNote.id);
+      } else {
+        setCardResult("卡片生成失败，请稍后重试");
+      }
     } catch {
       setCardResult("卡片生成失败，请检查模型配置");
     } finally {
@@ -1565,119 +1594,15 @@ export default function KnowledgeDetailPage() {
           )}
         </main>
 
-        {/* 右栏：AI 专家问答与润色辅助 */}
-        <aside className="hidden xl:flex w-72 shrink-0 flex-col bg-muted/10 overflow-hidden p-4 space-y-4">
-          <div className="flex items-center gap-2 border-b pb-2">
-            <Sparkles className="size-4 text-primary" />
-            <span className="text-xs font-semibold">墨匠 AI 助手</span>
-          </div>
-
-          {/* 快捷操作提示词 */}
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground">
-              智鉴 · 一键维度分析：
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() =>
-                  handleAskAi("润色这篇读书笔记，提炼核心金句", "refine")
-                }
-                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
-              >
-                <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
-                精炼 · 润色并提炼金句
-              </button>
-              <button
-                onClick={() =>
-                  handleAskAi(
-                    "对整篇笔记进行反辩分析，指出论点漏洞并给出反例",
-                    "challenge",
-                  )
-                }
-                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
-              >
-                <ShieldQuestion className="size-3.5 shrink-0 text-muted-foreground" />
-                反辩 · 红队挑漏洞举反例
-              </button>
-              <button
-                onClick={() =>
-                  handleAskAi(
-                    "解构这篇笔记的信息密度、情感倾向与逻辑递进关系",
-                    "assess",
-                  )
-                }
-                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
-              >
-                <Microscope className="size-3.5 shrink-0 text-muted-foreground" />
-                解构 · 密度/倾向/逻辑剖析
-              </button>
-              <button
-                onClick={() =>
-                  handleAskAi(
-                    "基于当前笔记，发散3个可以延展写的长文选题",
-                    "expand",
-                  )
-                }
-                className="flex items-center gap-2 rounded-lg border bg-card p-2.5 text-left text-xs transition-colors hover:border-foreground/30 text-foreground"
-              >
-                <Sprout className="size-3.5 shrink-0 text-muted-foreground" />
-                延展 · 发散长文选题
-              </button>
-            </div>
-          </div>
-
-          {/* AI 结果显示 */}
-          <div className="flex-1 overflow-y-auto space-y-2">
-            {aiAsking ? (
-              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-                <Loader2 className="size-4 animate-spin text-primary" />
-                <span className="text-xs">AI 深度思考中...</span>
-              </div>
-            ) : aiAnswer ? (
-              <div className="rounded-lg border bg-card p-3 space-y-2 text-xs shadow-xs">
-                <div className="flex items-center justify-between text-primary font-semibold text-[11px]">
-                  <span>AI 思考结果</span>
-                  <button
-                    onClick={() => {
-                      setEditingContent((prev) => `${prev}\n\n${aiAnswer}`);
-                    }}
-                    className="text-[10px] text-primary hover:underline"
-                  >
-                    插入正文
-                  </button>
-                </div>
-                <p className="whitespace-pre-wrap leading-relaxed text-foreground/90 font-sans">
-                  {aiAnswer}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* 底部提问框 */}
-          <div className="relative pt-2">
-            <Input
-              aria-label="向知识库提问"
-              value={aiQuestion}
-              onChange={(e) => setAiQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAskAi();
-                }
-              }}
-              placeholder="基于当前笔记向 AI 提问..."
-              className="pr-12 text-xs bg-background rounded-md"
-            />
-            <Button
-              size="icon-xs"
-              className="absolute right-1.5 top-3.5 size-6 rounded-md"
-              onClick={() => handleAskAi()}
-              disabled={!aiQuestion.trim() || aiAsking}
-            >
-              <Send className="size-3" />
-            </Button>
-          </div>
-        </aside>
+        {/* 右栏：当前笔记对应的原子知识卡片面板 */}
+        <NoteCardsPanel
+          note={selectedNote}
+          cards={noteCards}
+          loading={cardsLoading}
+          extracting={cardExtracting}
+          extractResult={cardResult}
+          onExtractCards={handleGenerateCard}
+        />
       </div>
 
       {/* 删除确认对话框 (替代原生 confirm/alert) */}

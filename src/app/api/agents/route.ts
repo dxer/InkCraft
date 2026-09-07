@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, seedCardExtractAgent } from "@/lib/db";
 import { mapAgent, type AgentRow } from "@/lib/mappers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const db = getDb();
+  seedCardExtractAgent(db);
   const rows = db
     .prepare(
       `SELECT * FROM custom_agents ORDER BY CASE stage 

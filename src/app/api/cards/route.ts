@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { extractCardFromDoc, getAllCards, getCardStats } from "@/lib/cards";
+import { extractCardFromDoc, getAllCards, getCardsForDoc, getCardStats } from "@/lib/cards";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const docId = searchParams.get("doc_id") || searchParams.get("document_id");
+
+  if (docId) {
+    const cards = getCardsForDoc(docId);
+    return NextResponse.json({ cards });
+  }
+
   const cards = getAllCards();
   const stats = getCardStats();
   return NextResponse.json({ cards, stats });

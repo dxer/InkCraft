@@ -69,13 +69,13 @@ export default function HomePage() {
     return () => window.removeEventListener("click", handleClose);
   }, [openMenu]);
 
-  // 平台检测：Mac 显示 ⌘，其余显示 Ctrl（SSR/首帧渲染通用文案，客户端快照切换）
-  const isMac = useSyncExternalStore(
-    subscribeNoop,
-    () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
-    () => null,
-  );
-  const modKey = isMac === null ? "Ctrl / ⌘" : isMac ? "⌘" : "Ctrl";
+  // 平台快捷键提示：客户端挂载后检测 Mac/Windows
+  const [modKey, setModKey] = useState("Ctrl / ⌘");
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      setModKey(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl");
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;

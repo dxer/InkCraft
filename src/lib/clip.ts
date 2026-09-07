@@ -38,18 +38,34 @@ export async function clipUrl(url: string): Promise<ClipResult> {
   };
 }
 
-/** 把 Readability 输出的正文 HTML 转为保留段落结构的纯文本 */
+/** 把 Readability 输出的正文 HTML 转为保留段落与代码结构的 Markdown 纯文本 */
 function extractBlocks(html: string | null | undefined): string {
   if (!html) return "";
   const doc = new JSDOM(html).window.document;
   doc.querySelectorAll("script,style,noscript").forEach((el) => el.remove());
+  doc.querySelectorAll("br").forEach((el) => el.replaceWith("\n"));
+
   const parts: string[] = [];
   for (const el of doc.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre")) {
     // 嵌套结构只取最外层（p 在 blockquote 内、li 在嵌套列表内不重复计）
     if (el.parentElement?.closest("blockquote,li,td,pre")) continue;
-    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
-    if (!text) continue;
     const tag = el.tagName.toLowerCase();
+    if (tag === "pre") {
+      const codeText = el.textContent?.trim();
+      if (codeText) {
+        parts.push(`\`\`\`\n${codeText}\n\`\`\``);
+      }
+      continue;
+    }
+    const raw = (el.textContent ?? "").trim();
+    if (!raw) continue;
+    // 保留段落内部合理换行，压缩多余水平空白
+    const text = raw
+      .split("\n")
+      .map((l) => l.replace(/[ \t]+/g, " ").trim())
+      .filter(Boolean)
+      .join("\n");
+    if (!text) continue;
     parts.push(tag.startsWith("h") ? `## ${text}` : text);
   }
   return parts.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
