@@ -214,20 +214,45 @@ pnpm dev
 
 ---
 
-### Docker 单容器部署
+### Docker 单容器部署（基于 Alpine 轻量镜像）
+
+墨匠容器基于 **`node:22-alpine`** 构建，集成多阶段编译、C++ 原生模块编译、最小非 root 用户权限与内置健康检查探针：
 
 ```bash
+# 1. 启动服务（自动构建并挂载持久化 SQLite 数据卷）
 docker compose up -d
+
+# 2. 查看容器运行状态与健康检查
+docker compose ps
+
+# 3. 查看实时日志
+docker compose logs -f
 ```
 
-`docker-compose.yml` 默认映射 `3000` 端口，并通过命名卷 `inkcraft_data` 持久化 `/app/data`。公网部署时请修改环境变量：
+`docker-compose.yml` 默认映射 `3000` 端口，并通过命名卷 `inkcraft_data` 持久化 `/app/data`。公网部署时可通过环境变量灵活配置：
 
-| 环境变量 | 说明 |
-| --- | --- |
-| `ACCESS_PASSWORD` | 访问口令，留空则不开启密码门禁 |
-| `OPENAI_BASE_URL` | 大模型端点，如 `https://api.deepseek.com/v1` |
-| `OPENAI_API_KEY` | 模型密钥（也可部署后在 `/settings` 面板填写） |
-| `OPENAI_MODEL` | 默认模型，如 `deepseek-chat` |
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `TZ` | `Asia/Shanghai` | 容器时区 |
+| `ACCESS_PASSWORD` | *(留空)* | 访问口令，留空则不开启密码门禁 |
+| `OPENAI_BASE_URL` | `https://api.deepseek.com/v1` | 大模型端点 |
+| `OPENAI_API_KEY` | *(留空)* | 模型密钥（也可部署后在 `/settings` 面板填写） |
+| `OPENAI_MODEL` | `deepseek-chat` | 默认模型名称 |
+
+> **手动 Docker CLI 构建与运行：**
+> ```bash
+> # 单独构建 Alpine 镜像
+> docker build -t inkcraft:latest .
+> 
+> # 运行容器并挂载宿主机目录
+> docker run -d \
+>   --name inkcraft \
+>   --restart unless-stopped \
+>   -p 3000:3000 \
+>   -v $(pwd)/data:/app/data \
+>   -e ACCESS_PASSWORD=your_password \
+>   inkcraft:latest
+> ```
 
 ---
 

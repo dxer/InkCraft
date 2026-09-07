@@ -2,5 +2,16 @@ node_modules
 .next
 .git
 .gitignore
+.dockerignore
 data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.log
+.env
+.env.local
+.env.*.local
+.zcode
+.DS_Store
+Thumbs.db
+README.md

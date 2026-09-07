@@ -3,20 +3,32 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: inkcraft:latest
     container_name: inkcraft
     restart: unless-stopped
+    stop_grace_period: 15s
     ports:
       - "3000:3000"
     environment:
-      # 访问控制：公网 VPS 部署时配置访问口令（留空则不开启密码门禁）
-      - ACCESS_PASSWORD=your_secure_password
-      # 大模型 BYOK 默认配置（也可进入网页端 /settings 面板配置）
+      # 时区配置
+      - TZ=Asia/Shanghai
+      # 访问控制：公网部署时配置访问口令（留空则不开启密码门禁）
+      - ACCESS_PASSWORD=
+      # 大模型 BYOK 默认配置（也可部署后进入网页端 /settings 面板按需配置与切换）
       - OPENAI_BASE_URL=https://api.deepseek.com/v1
-      - OPENAI_API_KEY=sk-your-key-here
+      - OPENAI_API_KEY=
       - OPENAI_MODEL=deepseek-chat
     volumes:
-      # SQLite 数据文件持久化挂载
+      # SQLite 数据文件持久化挂载（保存知识库、卡片、选题与成果）
       - inkcraft_data:/app/data
+      # 亦可使用宿主机本地相对目录直接挂载（取消注释并注释上一行）：
+      # - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/settings || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 volumes:
   inkcraft_data:
