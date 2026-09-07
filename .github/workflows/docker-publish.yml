@@ -5,15 +5,15 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
-      - 'v*.*'
+      - "v*.*.*"
+      - "v*.*"
   pull_request:
     branches:
       - main
   workflow_dispatch:
     inputs:
       push_image:
-        description: '是否推送镜像到 GHCR 镜像仓库'
+        description: "是否推送镜像到 GHCR 镜像仓库"
         required: true
         type: boolean
         default: true
@@ -66,8 +66,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.push_image) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
