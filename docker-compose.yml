@@ -14,12 +14,10 @@ services:
       - TZ=Asia/Shanghai
       # 访问控制：公网部署时配置访问口令（留空则不开启密码门禁）
       - ACCESS_PASSWORD=
-      # 大模型 BYOK 默认配置（也可部署后进入网页端 /settings 面板按需配置与切换）
-      - OPENAI_BASE_URL=https://api.deepseek.com/v1
-      - OPENAI_API_KEY=
-      - OPENAI_MODEL=deepseek-chat
+      # 注意：大模型提供商与 API Key 不在环境变量/配置文件中配置，
+      # 部署启动后请直接访问网页后台「系统设置 (/settings)」页面可视化添加并分配通道。
     volumes:
-      # SQLite 数据文件持久化挂载（保存知识库、卡片、选题与成果）
+      # SQLite 数据文件持久化挂载（保存所有知识库、卡片、模型设置、选题与成果）
       - inkcraft_data:/app/data
       # 亦可使用宿主机本地相对目录直接挂载（取消注释并注释上一行）：
       # - ./data:/app/data

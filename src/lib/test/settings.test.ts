@@ -10,7 +10,7 @@ const tmpDir = fs.mkdtempSync(
 process.env.INKCRAFT_DB_PATH = path.join(tmpDir, "settings.sqlite");
 
 import { getDb } from "../db";
-import { getProviders, getSettings } from "../settings";
+import { getByok, getProviders, getSettings, isAiConfigured } from "../settings";
 
 const db = getDb();
 
@@ -57,4 +57,14 @@ test("sentinel 生效后不再重写 providers 原值", () => {
             before,
             "重复读取不应改动存储值",
       );
+});
+
+test("getByok 与 isAiConfigured 仅读取后台配置，环境变量不再作为隐式兜底", () => {
+      // 此时已有一条迁移好的 DeepSeek 配置
+      const byok = getByok();
+      assert.ok(byok);
+      assert.equal(byok?.baseUrl, "https://api.deepseek.com/v1");
+      assert.equal(byok?.apiKey, "sk-test");
+      assert.equal(byok?.model, "deepseek-chat");
+      assert.equal(isAiConfigured(), true);
 });

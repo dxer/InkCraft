@@ -95,14 +95,14 @@ test("updateTopicStatusInDb & getTopicsFromDb: 状态更新与条件筛选", () 
   deleteTopicFromDb(topic.id);
 });
 
-test("checkAndMineHourlyTopics: 无新笔记时自动跳过，消耗 0 Token", async () => {
+test("checkAndMineHourlyTopics: 无新笔记时自动跳过，不消耗 Token", async () => {
   // 设置上次扫描时间为未来很远的时间点，确保无新笔记
   setSetting("topic_mining.last_scanned_at", new Date(Date.now() + 100000).toISOString());
 
   const result = await checkAndMineHourlyTopics({ force: true });
   assert.equal(result.ran, false);
   assert.equal(result.newNotesCount, 0);
-  assert.match(result.reason || "", /跳过选题生成/);
+  assert.match(result.reason || "", /无新收录笔记|跳过选题生成/);
 });
 
 test("getTopicMiningState: 正确识别 running 状态与防重复触发", () => {

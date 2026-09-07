@@ -229,15 +229,16 @@ docker compose ps
 docker compose logs -f
 ```
 
-`docker-compose.yml` 默认映射 `3000` 端口，并通过命名卷 `inkcraft_data` 持久化 `/app/data`。公网部署时可通过环境变量灵活配置：
+`docker-compose.yml` 默认映射 `3000` 端口，并通过命名卷 `inkcraft_data` 持久化 `/app/data`（保存全部知识库、原子卡片、模型提供商配置、选题灵感与成稿）：
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `TZ` | `Asia/Shanghai` | 容器时区 |
 | `ACCESS_PASSWORD` | *(留空)* | 访问口令，留空则不开启密码门禁 |
-| `OPENAI_BASE_URL` | `https://api.deepseek.com/v1` | 大模型端点 |
-| `OPENAI_API_KEY` | *(留空)* | 模型密钥（也可部署后在 `/settings` 面板填写） |
-| `OPENAI_MODEL` | `deepseek-chat` | 默认模型名称 |
+| `INKCRAFT_DB_PATH` | `/app/data/inkcraft.sqlite` | SQLite 数据文件自定义路径（可选） |
+
+> **💡 大模型配置说明**：
+> 墨匠遵循 **BYOK（自带密钥）** 理念，大模型不在环境变量或静态配置文件中配置，而是登录后在 **「系统设置」(`/settings`)** 面板中可视化集中管理。支持接入任意兼容 OpenAI 协议的提供商（DeepSeek、OpenAI、SiliconFlow、Ollama 等），并为文本生成、多模态生图与嵌入检索独立分配通道，热修改即时生效。
 
 > **手动 Docker CLI 构建与运行：**
 > ```bash

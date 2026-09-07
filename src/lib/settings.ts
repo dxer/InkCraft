@@ -131,17 +131,19 @@ export function getModelChannel(
 
 /**
  * 文本通道解析（全部 AI 调用的默认入口）：
- * 1. 多提供商档案的文本通道；2. 旧版 byok.* 单通道键；3. 环境变量兜底。
+ * 1. 优先读取后台多提供商档案中指定的文本通道；
+ * 2. 兼容读取后台历史保存的 byok.* 键；
+ * 3. 未在后台配置时返回 null（不从环境变量隐式读取，必须在后台 /settings 显式配置）。
  */
 export function getByok(): ByokConfig | null {
   const ch = getModelChannel("text");
   if (ch) return { baseUrl: ch.baseUrl, apiKey: ch.apiKey, model: ch.model };
 
   const s = getSettings();
-  const baseUrl = s["byok.base_url"] || process.env.OPENAI_BASE_URL || "";
-  const apiKey = s["byok.api_key"] || process.env.OPENAI_API_KEY || "";
+  const baseUrl = (s["byok.base_url"] || "").trim();
+  const apiKey = (s["byok.api_key"] || "").trim();
   if (!baseUrl || !apiKey) return null;
-  const model = s["byok.model"] || process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = (s["byok.model"] || "").trim() || "gpt-4o-mini";
   return { baseUrl, apiKey, model };
 }
 

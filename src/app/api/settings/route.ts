@@ -19,17 +19,17 @@ function maskKey(apiKey: string): string {
   return apiKey.length > 8 ? `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}` : "••••••••";
 }
 
-/** 旧版单通道键 → 提供商档案的一次性视图合成（不落库，保存时才迁移） */
+/** 旧版单通道键 → 提供商档案的一次性视图合成（仅从数据库读取历史设置，不落库，保存时才迁移） */
 function legacyProvider(s: Record<string, string>): ProviderConfig | null {
-  const baseUrl = s["byok.base_url"] || process.env.OPENAI_BASE_URL || "";
+  const baseUrl = (s["byok.base_url"] || "").trim();
   if (!baseUrl) return null;
-  const apiKey = s["byok.api_key"] || process.env.OPENAI_API_KEY || "";
+  const apiKey = (s["byok.api_key"] || "").trim();
   return {
     id: "legacy-default",
     name: "默认通道",
     baseUrl,
     apiKey: maskKey(apiKey),
-    models: [{ id: s["byok.model"] || process.env.OPENAI_MODEL || "gpt-4o-mini", enabled: true, kinds: ["text"] }],
+    models: [{ id: (s["byok.model"] || "").trim() || "gpt-4o-mini", enabled: true, kinds: ["text"] }],
   };
 }
 
