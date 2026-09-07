@@ -43,7 +43,6 @@ const SECTIONS = [
       { href: "/topics", label: "选题雷达", icon: Lightbulb },
       { href: "/works", label: "作品库", icon: Library },
       { href: "/agents", label: "创作技能", icon: Users },
-      { href: "/memory", label: "思考轨迹", icon: Brain },
     ],
   },
 ] as const;
