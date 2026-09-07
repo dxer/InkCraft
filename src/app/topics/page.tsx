@@ -61,7 +61,7 @@ const RADAR_ANGLES: Array<{
 }> = [
   {
     id: "all",
-    label: "全部雷达灵感",
+    label: "全部灵感",
     sub: "全景视野",
     icon: Sparkles,
     color: "text-amber-500",
@@ -69,22 +69,22 @@ const RADAR_ANGLES: Array<{
   {
     id: "paradox",
     label: "反差碰撞",
-    sub: "认知张力 · 爆款首选",
+    sub: "认知张力 · 突破常识",
     icon: Zap,
     color: "text-rose-500",
   },
   {
     id: "intersection",
     label: "跨界同构",
-    sub: "跨领域隐喻 · 深度长文",
+    sub: "跨领域隐喻 · 深度叙事",
     icon: GitFork,
     color: "text-purple-500",
   },
   {
     id: "deep_dive",
     label: "专题纵深",
-    sub: "体系化干货 · 闭环实操",
-    icon: Layers,
+    sub: "同维递进 · 系统专栏",
+    icon: BookOpen,
     color: "text-blue-500",
   },
 ];
@@ -294,7 +294,7 @@ export default function TopicsPage() {
             )}
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            将静态原子卡片资产主动重组为高传播力创作弹药：三种高阶碰撞策略 · 3 选 1 标题矩阵 · 精确锚定卡片大纲。
+            将原子知识卡片主动重组为高传播力创作方案：三大碰撞策略 · 多风格标题矩阵 · 精确锚定卡片大纲。
           </p>
         </div>
 
@@ -310,9 +310,9 @@ export default function TopicsPage() {
             {mining ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <Zap className="size-3.5 text-amber-300 fill-amber-300" />
+              <Sparkles className="size-3.5 text-amber-300 fill-amber-300" />
             )}
-            <span>{mining ? "雷达深度碰撞中…" : "🎲 触发智能雷达碰撞"}</span>
+            <span>{mining ? "雷达深度碰撞中…" : "触发智能雷达碰撞"}</span>
           </Button>
         </div>
       </div>
@@ -411,25 +411,27 @@ export default function TopicsPage() {
                 type="button"
                 onClick={() => setSortBy("score")}
                 className={cn(
-                  "rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                  "rounded-md px-2 py-1 transition-colors cursor-pointer flex items-center gap-1",
                   sortBy === "score"
-                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold"
+                    ? "bg-background text-foreground font-semibold shadow-2xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                🔥 评分最高
+                <Flame className="size-3 text-amber-500" />
+                <span>评分最高</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSortBy("created")}
                 className={cn(
-                  "rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                  "rounded-md px-2 py-1 transition-colors cursor-pointer flex items-center gap-1",
                   sortBy === "created"
-                    ? "bg-muted text-foreground font-semibold"
+                    ? "bg-background text-foreground font-semibold shadow-2xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                🕒 最新生成
+                <Clock className="size-3" />
+                <span>最新生成</span>
               </button>
             </div>
           </div>
@@ -540,7 +542,7 @@ export default function TopicsPage() {
                       </span>
 
                       <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-semibold border", angleTag.color)}>
-                        🎯 {angleTag.label}
+                        {angleTag.label}
                       </span>
 
                       {topic.targetAudience && (

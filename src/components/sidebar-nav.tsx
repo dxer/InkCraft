@@ -23,26 +23,27 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const SECTIONS = [
   {
-    title: "", // 默认主菜单
-    items: [
-      { href: "/", label: "首页", icon: Home },
-      { href: "/workshop", label: "工坊", icon: Zap },
-    ],
-  },
-  {
-    title: "整理",
-    items: [
-      { href: "/knowledge", label: "知识库", icon: BookOpen },
-      { href: "/tags", label: "标签", icon: Tag },
-    ],
-  },
-  {
     title: "创作",
     items: [
-      { href: "/cards", label: "卡片", icon: IdCard },
-      { href: "/topics", label: "选题", icon: Lightbulb },
-      { href: "/memory", label: "记忆", icon: Brain },
-      { href: "/works", label: "成果", icon: Library },
+      { href: "/", label: "闪念速记", icon: Home },
+      { href: "/workshop", label: "创作工坊", icon: Zap },
+    ],
+  },
+  {
+    title: "知识库",
+    items: [
+      { href: "/knowledge", label: "全部笔记", icon: BookOpen },
+      { href: "/cards", label: "知识卡片", icon: IdCard },
+      { href: "/tags", label: "标签索引", icon: Tag },
+    ],
+  },
+  {
+    title: "灵感与作品",
+    items: [
+      { href: "/topics", label: "选题雷达", icon: Lightbulb },
+      { href: "/works", label: "作品库", icon: Library },
+      { href: "/agents", label: "创作技能", icon: Users },
+      { href: "/memory", label: "思考轨迹", icon: Brain },
     ],
   },
 ] as const;
@@ -208,7 +209,7 @@ export function SidebarNav() {
           ))}
         </nav>
 
-        {/* 底部功能区：编辑部与设置 */}
+        {/* 底部功能区：系统设置 */}
         <div
           className={`border-t ${isCollapsed ? "p-2 space-y-1" : "p-3 space-y-1"}`}
         >
@@ -216,20 +217,8 @@ export function SidebarNav() {
             <>
               <ThemeToggle className="mx-auto size-9" />
               <Link
-                href="/agents"
-                title="编辑部"
-                className={`flex size-9 items-center justify-center mx-auto rounded-md transition-colors ${
-                  pathname.startsWith("/agents")
-                    ? "bg-muted text-foreground font-medium"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                }`}
-              >
-                <Users className="size-4 shrink-0" />
-                <span className="sr-only">编辑部</span>
-              </Link>
-              <Link
                 href="/settings"
-                title="设置"
+                title="系统设置"
                 className={`flex size-9 items-center justify-center mx-auto rounded-md transition-colors ${
                   pathname.startsWith("/settings")
                     ? "bg-muted text-foreground font-medium"
@@ -237,34 +226,21 @@ export function SidebarNav() {
                 }`}
               >
                 <Settings className="size-4 shrink-0" />
-                <span className="sr-only">设置</span>
+                <span className="sr-only">系统设置</span>
               </Link>
             </>
           ) : (
-            <>
-              <Link
-                href="/agents"
-                className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground ${
-                  pathname.startsWith("/agents")
-                    ? "bg-muted text-foreground font-medium"
-                    : ""
-                }`}
-              >
-                <Users className="size-3.5 shrink-0" />
-                <span>编辑部</span>
-              </Link>
-              <Link
-                href="/settings"
-                className={`flex items-center gap-2.5 rounded-md px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground ${
-                  pathname.startsWith("/settings")
-                    ? "bg-muted text-foreground font-medium"
-                    : ""
-                }`}
-              >
-                <Settings className="size-3.5 shrink-0" />
-                <span>设置</span>
-              </Link>
-            </>
+            <Link
+              href="/settings"
+              className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground ${
+                pathname.startsWith("/settings")
+                  ? "bg-muted text-foreground font-medium"
+                  : ""
+              }`}
+            >
+              <Settings className="size-4 shrink-0" />
+              <span>系统设置</span>
+            </Link>
           )}
         </div>
       </aside>

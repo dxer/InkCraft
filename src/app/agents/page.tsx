@@ -274,7 +274,7 @@ export default function AgentsPage() {
                   )}
                 >
                   <PenLine className="size-3" />
-                  <span>生文 · 文本创作 ({textSkillsCount})</span>
+                  <span>文本创作 ({textSkillsCount})</span>
                 </button>
                 <button
                   type="button"
@@ -287,7 +287,7 @@ export default function AgentsPage() {
                   )}
                 >
                   <ImageIcon className="size-3 text-amber-500" />
-                  <span>生图 · 视觉配图 ({imageSkillsCount})</span>
+                  <span>视觉配图 ({imageSkillsCount})</span>
                 </button>
               </div>
             </div>
@@ -425,16 +425,16 @@ function AgentCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <AgentStageBadge stage={agent.stage} />
-            {/* 模态属性标签（生文 / 生图） */}
+            {/* 模态属性标签（文本 / 图像） */}
             {isImage ? (
               <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0 text-[10px] font-medium leading-4 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 <ImageIcon className="size-3" />
-                <span>生图</span>
+                <span>图像</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0 text-[10px] font-medium leading-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 <PenLine className="size-3" />
-                <span>生文</span>
+                <span>文本</span>
               </span>
             )}
           </div>

@@ -64,11 +64,11 @@ import type { VoiceProfile } from "@/app/api/voices/route";
 type TabId = "models" | "voices" | "mcp" | "extension" | "export";
 
 const TABS: { id: TabId; label: string; icon: typeof KeyRound }[] = [
-  { id: "models", label: "模型设置", icon: KeyRound },
-  { id: "voices", label: "文风语调档案", icon: Volume2 },
-  { id: "mcp", label: "MCP 与 API 密钥", icon: Bot },
-  { id: "extension", label: "采集接口", icon: Puzzle },
-  { id: "export", label: "数据导出与备份", icon: DatabaseBackup },
+  { id: "models", label: "模型与服务商", icon: KeyRound },
+  { id: "voices", label: "个人文风档案", icon: Volume2 },
+  { id: "mcp", label: "外部助手连接 (MCP)", icon: Bot },
+  { id: "extension", label: "浏览器剪藏扩展", icon: Puzzle },
+  { id: "export", label: "数据导出与迁移", icon: DatabaseBackup },
 ];
 
 type ModelKind = "text" | "embedding" | "image";
@@ -177,8 +177,7 @@ export default function SettingsPage() {
           </span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          多提供商模型接入、文风语调档案与数据主权配置，本地优先，所有数据仅保存在本机
-          SQLite。
+          管理 AI 创作模型、个人文风档案与外部助手连接。
         </p>
       </header>
 
@@ -1165,7 +1164,7 @@ function ChannelSelect({
   );
 }
 
-/* ============ 标签页二：文风语调档案 ============ */
+/* ============ 标签页二：个人文风档案 ============ */
 
 function VoicesTab() {
   const [voices, setVoices] = useState<VoiceProfile[]>([]);
@@ -1241,27 +1240,26 @@ function VoicesTab() {
             <div className="flex items-center gap-2">
               <Volume2 className="size-4 text-primary" />
               <CardTitle className="text-base font-semibold">
-                文风语调档案 (Voice Profiles)
+                个人文风档案
               </CardTitle>
             </div>
             <Button
               size="sm"
               variant="outline"
-              className="h-7 gap-1 text-xs rounded-md"
+              className="h-8 gap-1.5 text-xs rounded-lg font-medium cursor-pointer"
               onClick={() => setVoiceDialogOpen(true)}
             >
               <Plus className="size-3.5" />
               克隆新文风
             </Button>
           </div>
-          <CardDescription className="text-xs text-muted-foreground">
-            录入你的 3~5 篇历史代表作样稿，AI
-            自动抽取文风特征并在起草工位挂载克隆。
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            录入 1~6 篇历史代表作样稿，AI 自动学习你的行文节奏、用词习惯与语气偏好，并在起草时无缝还原。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-0 space-y-3">
           {voices.length === 0 ? (
-            <div className="rounded-lg border border-dashed py-8 text-center text-xs text-muted-foreground">
+            <div className="rounded-lg border border-dashed py-8 text-center text-xs text-muted-foreground bg-muted/20">
               暂无自定义文风档案，系统默认采用《出版级深度专栏风》。
             </div>
           ) : (
@@ -1286,7 +1284,7 @@ function VoicesTab() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground rounded-md"
+                      className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground rounded-md cursor-pointer"
                       onClick={() => handlePreview(v)}
                       disabled={previewLoading}
                     >
@@ -1295,25 +1293,26 @@ function VoicesTab() {
                       ) : (
                         <Play className="size-3.5" />
                       )}
-                      试听
+                      声库试听
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground rounded-md"
+                      className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground rounded-md cursor-pointer"
                       onClick={() => reextractVoice(v.id)}
                       disabled={reextractingId === v.id}
                     >
                       <RefreshCw
                         className={`size-3.5 ${reextractingId === v.id ? "animate-spin" : ""}`}
                       />
-                      重新抽取
+                      重新提炼
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      className="text-muted-foreground hover:text-destructive rounded-md"
+                      className="text-muted-foreground hover:text-destructive rounded-md cursor-pointer"
                       onClick={() => deleteVoice(v.id)}
+                      title="删除文风档案"
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -1539,7 +1538,7 @@ function NewVoiceDialog({
   );
 }
 
-/* ============ 标签页四：采集接口（浏览器插件） ============ */
+/* ============ 标签页四：浏览器剪藏扩展 ============ */
 
 function ExtensionTab() {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -1594,27 +1593,26 @@ function ExtensionTab() {
           <div className="flex items-center gap-2">
             <Puzzle className="size-4 text-primary" />
             <CardTitle className="text-base font-semibold">
-              浏览器插件 · 网页剪藏接口
+              浏览器剪藏扩展
             </CardTitle>
           </div>
-          <CardDescription className="text-xs text-muted-foreground">
-            配合墨匠剪藏插件（Vite + React，位于仓库 extension/
-            目录），在任意网页一键采集正文或选中内容存入知识库。
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            配合墨匠浏览器扩展，在浏览网页时一键采集文章正文或选中文字并存入知识库。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-0 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">接口地址（插件中配置的服务 URL）</Label>
+            <Label className="text-xs">服务接口地址</Label>
             <div className="flex gap-2">
               <Input
                 readOnly
                 value={endpoint}
-                className="font-mono text-xs rounded-md bg-muted/40"
+                className="font-mono text-xs rounded-md bg-muted/40 font-semibold"
               />
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1 shrink-0 text-xs rounded-md"
+                className="h-8 gap-1 shrink-0 text-xs rounded-md cursor-pointer"
                 onClick={() => copyText(endpoint, "url")}
               >
                 {copied === "url" ? (
@@ -1628,7 +1626,7 @@ function ExtensionTab() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">API Key</Label>
+            <Label className="text-xs">剪藏专属密钥 (API Key)</Label>
             {loading ? (
               <div className="h-10 animate-pulse rounded-md bg-muted/50" />
             ) : apiKey ? (
@@ -1638,12 +1636,12 @@ function ExtensionTab() {
                     readOnly
                     aria-label="插件密钥"
                     value={apiKey}
-                    className="font-mono text-xs rounded-md bg-muted/40 break-all"
+                    className="font-mono text-xs rounded-md bg-muted/40 break-all font-semibold"
                   />
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-1 shrink-0 text-xs rounded-md"
+                    className="h-8 gap-1 shrink-0 text-xs rounded-md cursor-pointer"
                     onClick={() => copyText(apiKey, "key")}
                   >
                     {copied === "key" ? (
@@ -1656,14 +1654,14 @@ function ExtensionTab() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">
-                    请妥善保管；重新生成后旧 Key 立即失效。
+                    请妥善保管密钥；重新生成后旧密钥将立即失效。
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`h-7 gap-1 text-xs rounded-md ${
+                    className={`h-7 gap-1 text-xs rounded-md cursor-pointer ${
                       regenArmed
-                        ? "text-destructive hover:bg-destructive/10"
+                        ? "text-destructive hover:bg-destructive/10 font-medium"
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                     onClick={() =>
@@ -1676,18 +1674,18 @@ function ExtensionTab() {
                     ) : (
                       <RefreshCw className="size-3.5" />
                     )}
-                    {regenArmed ? "再次点击确认重新生成" : "重新生成"}
+                    {regenArmed ? "确认重新生成" : "重新生成"}
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed p-4">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed p-4 bg-muted/20">
                 <span className="text-xs text-muted-foreground">
-                  尚未生成 API Key，生成后即可在插件中配置使用。
+                  尚未生成剪藏密钥，生成后即可在浏览器扩展中配置使用。
                 </span>
                 <Button
                   size="sm"
-                  className="h-8 gap-1.5 text-xs rounded-md font-semibold"
+                  className="h-8 gap-1.5 text-xs rounded-md font-semibold cursor-pointer"
                   onClick={generateKey}
                   disabled={generating}
                 >
@@ -1696,59 +1694,18 @@ function ExtensionTab() {
                   ) : (
                     <KeyRound className="size-3.5" />
                   )}
-                  {generating ? "生成中..." : "生成 API Key"}
+                  {generating ? "生成中..." : "生成密钥"}
                 </Button>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
-
-      <Card className="rounded-xl border bg-card shadow-xs">
-        <CardHeader className="p-6 pb-3">
-          <CardTitle className="text-sm font-semibold">使用步骤</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6 pt-0">
-          <ol className="space-y-2 text-xs leading-relaxed text-muted-foreground">
-            <li>
-              <span className="font-semibold text-foreground">1.</span> 在仓库{" "}
-              <code className="rounded bg-muted px-1 font-mono text-[11px]">
-                extension/
-              </code>{" "}
-              目录执行{" "}
-              <code className="rounded bg-muted px-1 font-mono text-[11px]">
-                pnpm install &amp;&amp; pnpm build
-              </code>{" "}
-              构建插件；
-            </li>
-            <li>
-              <span className="font-semibold text-foreground">2.</span>{" "}
-              打开浏览器{" "}
-              <code className="rounded bg-muted px-1 font-mono text-[11px]">
-                chrome://extensions
-              </code>
-              ，开启开发者模式，「加载已解压的扩展程序」选择{" "}
-              <code className="rounded bg-muted px-1 font-mono text-[11px]">
-                extension/dist
-              </code>
-              ；
-            </li>
-            <li>
-              <span className="font-semibold text-foreground">3.</span>{" "}
-              在插件设置中粘贴上方接口地址与 API Key，点击「测试连接」验证；
-            </li>
-            <li>
-              <span className="font-semibold text-foreground">4.</span>{" "}
-              在任意网页点击插件图标，采集正文或选中内容，确认后保存至主知识库。
-            </li>
-          </ol>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-/* ============ 标签页三：数据导出与备份 ============ */
+/* ============ 标签页三：数据导出与迁移 ============ */
 
 function ExportTab() {
   return (
@@ -1757,12 +1714,11 @@ function ExportTab() {
         <div className="flex items-center gap-2">
           <DatabaseBackup className="size-4 text-primary" />
           <CardTitle className="text-base font-semibold">
-            数据导出与备份
+            数据导出与迁移
           </CardTitle>
         </div>
-        <CardDescription className="text-xs text-muted-foreground">
-          本地优先意味着数据完全属于你：随时整包带走，SQLite 备份可替换
-          data/inkcraft.sqlite 实现完整恢复。
+        <CardDescription className="text-xs text-muted-foreground mt-1">
+          数据完全属于你。随时导出全部知识资产与成稿成果，或下载完整数据库备份进行迁移。
         </CardDescription>
       </CardHeader>
       <CardContent className="p-6 pt-0">
@@ -1770,7 +1726,7 @@ function ExportTab() {
           <Button
             asChild
             variant="outline"
-            className="h-auto flex-col items-start gap-1.5 rounded-lg p-4 text-left"
+            className="h-auto flex-col items-start gap-1.5 rounded-xl p-4 text-left cursor-pointer hover:border-primary/40 hover:bg-muted/30"
           >
             <a href="/api/export/markdown" download>
               <FileDown className="size-4 text-primary" />
@@ -1778,22 +1734,22 @@ function ExportTab() {
                 导出 Markdown 全文包
               </span>
               <span className="text-[11px] font-normal leading-relaxed text-muted-foreground">
-                全部知识条目与装配成果，纯文本可读可迁移
+                全部知识条目与成稿作品，纯文本标准格式
               </span>
             </a>
           </Button>
           <Button
             asChild
             variant="outline"
-            className="h-auto flex-col items-start gap-1.5 rounded-lg p-4 text-left"
+            className="h-auto flex-col items-start gap-1.5 rounded-xl p-4 text-left cursor-pointer hover:border-primary/40 hover:bg-muted/30"
           >
             <a href="/api/export/sqlite" download>
               <Database className="size-4 text-primary" />
               <span className="text-xs font-semibold">
-                下载 SQLite 完整备份
+                下载完整数据备份
               </span>
               <span className="text-[11px] font-normal leading-relaxed text-muted-foreground">
-                含全部表、索引与 FTS 数据，可整体恢复
+                包含全部原子卡片、选题库与历史版本，可整体恢复
               </span>
             </a>
           </Button>
@@ -1803,7 +1759,7 @@ function ExportTab() {
   );
 }
 
-/* ============ 标签页五：MCP 与 API 密钥管理 ============ */
+/* ============ 标签页五：外部助手连接 (MCP) ============ */
 
 interface ApiKeyViewItem {
   id: string;
@@ -2079,17 +2035,17 @@ function McpTab() {
           <div className="flex items-center gap-2">
             <Bot className="size-4 text-primary" />
             <CardTitle className="text-base font-semibold">
-              MCP 双模服务接口 (Model Context Protocol)
+              外部助手连接配置 (MCP)
             </CardTitle>
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
-            统一通过 <code className="rounded bg-muted px-1 font-mono text-primary font-semibold">/mcp</code> 端点接入。支持标准 SSE 长连接握手与无状态 Direct JSON-RPC 2.0 请求。
+            通过标准 Model Context Protocol 协议，将你的知识库能力无缝接入主流 AI 创作客户端。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-0 space-y-5">
           {/* 统一服务 URL */}
           <div className="space-y-1.5">
-            <Label className="text-xs">统一 MCP 服务端点 URL</Label>
+            <Label className="text-xs">服务接口地址 (Endpoint URL)</Label>
             <div className="flex gap-2">
               <Input
                 readOnly

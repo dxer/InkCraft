@@ -24,33 +24,33 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const SECTIONS = [
   {
-    title: "",
-    items: [
-      { href: "/", label: "首页", icon: Home },
-      { href: "/workshop", label: "工坊", icon: Zap },
-    ],
-  },
-  {
-    title: "整理",
-    items: [
-      { href: "/knowledge", label: "知识库", icon: BookOpen },
-      { href: "/tags", label: "标签", icon: Tag },
-    ],
-  },
-  {
     title: "创作",
     items: [
-      { href: "/cards", label: "卡片", icon: IdCard },
-      { href: "/topics", label: "选题", icon: Lightbulb },
-      { href: "/memory", label: "记忆", icon: Brain },
-      { href: "/works", label: "成果", icon: Library },
+      { href: "/", label: "闪念速记", icon: Home },
+      { href: "/workshop", label: "创作工坊", icon: Zap },
+    ],
+  },
+  {
+    title: "知识库",
+    items: [
+      { href: "/knowledge", label: "全部笔记", icon: BookOpen },
+      { href: "/cards", label: "知识卡片", icon: IdCard },
+      { href: "/tags", label: "标签索引", icon: Tag },
+    ],
+  },
+  {
+    title: "灵感与作品",
+    items: [
+      { href: "/topics", label: "选题雷达", icon: Lightbulb },
+      { href: "/works", label: "作品库", icon: Library },
+      { href: "/agents", label: "创作技能", icon: Users },
+      { href: "/memory", label: "思考轨迹", icon: Brain },
     ],
   },
 ] as const;
 
 const FOOTER_LINKS = [
-  { href: "/agents", label: "编辑部", icon: Users },
-  { href: "/settings", label: "设置", icon: Settings },
+  { href: "/settings", label: "系统设置", icon: Settings },
 ] as const;
 
 /** 移动端顶栏 + 抽屉导航（桌面端不渲染）。与桌面侧边栏同样在登录页 / 知识库工作台隐藏。 */
