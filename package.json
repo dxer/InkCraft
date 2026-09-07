@@ -1,6 +1,13 @@
 {
   "name": "inkcraft",
   "version": "0.1.0",
+  "description": "墨匠 (InkCraft) - 本地优先的现代 AI 内容创作工坊",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dxer/InkCraft.git"
+  },
+  "homepage": "https://github.com/dxer/InkCraft",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -112,7 +112,7 @@ AI 自动将入库笔记精炼萃取为标准的原子永久卡片：
 
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/hfling/InkCraft.git
+git clone https://github.com/dxer/InkCraft.git
 cd InkCraft
 
 # 2. 一键启动服务
