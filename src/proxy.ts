@@ -10,22 +10,23 @@ export function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // 放行静态资源、登录页、认证接口及本地周期增量挖掘任务
+  // 放行静态资源、登录页与认证/插件接口。
+  // /api/topics/mine 不再按 Host 头放行（Host 可伪造）：页面按钮同源带 Session Cookie 即可通过；
+  // 定时挖掘改由 instrumentation 进程内直接调用 lib，不走 HTTP。
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname === "/login" ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/extension") ||
-    (pathname === "/api/topics/mine" && (request.headers.get("host")?.startsWith("localhost") || request.headers.get("host")?.startsWith("127.0.0.1")))
+    pathname.startsWith("/api/extension")
   ) {
     return NextResponse.next();
   }
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const expectedToken = generateSessionToken(password);
-  const authHeader = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  const isAuthenticated = token === expectedToken || authHeader === password;
+  // 只认 Session Cookie；不接受 Authorization 携带原始口令（会落访问日志且绕过登录限流）
+  const isAuthenticated = token === expectedToken;
 
   if (!isAuthenticated) {
     if (pathname.startsWith("/api/")) {

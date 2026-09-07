@@ -8,7 +8,11 @@ import path from "node:path";
  * - dev 模式 HMR 会反复 import，用 globalThis 缓存连接
  */
 
-const globalForDb = globalThis as unknown as { __inkcraftDb?: Database.Database };
+// SAFETY: globalThis 单例缓存——同一进程内所有模块共享同一 better-sqlite3 连接（含 HMR 反复 import）；
+// 该断言只是把 globalThis 上我们自己写入的字段读回原类型，值恒为 getDb() 写入的实例，类型安全由这个写读约定保证。
+const globalForDb = globalThis as unknown as {
+  __inkcraftDb?: Database.Database;
+};
 
 function resolveDbPath(): string {
   if (process.env.INKCRAFT_DB_PATH) return process.env.INKCRAFT_DB_PATH;
@@ -25,7 +29,28 @@ function createDb(): Database.Database {
   return db;
 }
 
-function migrate(db: Database.Database): void {
+/** 表是否存在某列（pragma 表值函数；table 为代码内常量，无注入面） */
+function hasColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+): boolean {
+  return !!db
+    .prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`)
+    .get(column);
+}
+
+/** 幂等加列：列已存在则跳过（替代 try/catch 吞错，避免掩盖真实错误） */
+function ensureColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+  ddl: string,
+): void {
+  if (!hasColumn(db, table, column)) db.exec(ddl);
+}
+
+function runLegacyMigrations(db: Database.Database): void {
   db.exec(`
     -- -1. 多知识库表
     CREATE TABLE IF NOT EXISTS knowledge_bases (
@@ -77,23 +102,37 @@ function migrate(db: Database.Database): void {
   `);
 
   // 确保现有库升级添加 kb_id 字段
-  try {
-    db.prepare("ALTER TABLE knowledge_items ADD COLUMN kb_id TEXT DEFAULT 'default'").run();
-  } catch {}
-  try {
-    db.prepare("ALTER TABLE documents ADD COLUMN kb_id TEXT DEFAULT 'default'").run();
-  } catch {}
+  ensureColumn(
+    db,
+    "knowledge_items",
+    "kb_id",
+    "ALTER TABLE knowledge_items ADD COLUMN kb_id TEXT DEFAULT 'default'",
+  );
+  ensureColumn(
+    db,
+    "documents",
+    "kb_id",
+    "ALTER TABLE documents ADD COLUMN kb_id TEXT DEFAULT 'default'",
+  );
 
   // 笔记修改时间：任何 PATCH 更新时刷新；存量回填为创建时间
-  try {
-    db.prepare("ALTER TABLE knowledge_items ADD COLUMN updated_at DATETIME").run();
-  } catch {}
-  db.exec("UPDATE knowledge_items SET updated_at = COALESCE(updated_at, created_at);");
+  ensureColumn(
+    db,
+    "knowledge_items",
+    "updated_at",
+    "ALTER TABLE knowledge_items ADD COLUMN updated_at DATETIME",
+  );
+  db.exec(
+    "UPDATE knowledge_items SET updated_at = COALESCE(updated_at, created_at);",
+  );
 
   // 剪藏来源：浏览器插件保存网页时的原文链接
-  try {
-    db.prepare("ALTER TABLE knowledge_items ADD COLUMN source_url TEXT").run();
-  } catch {}
+  ensureColumn(
+    db,
+    "knowledge_items",
+    "source_url",
+    "ALTER TABLE knowledge_items ADD COLUMN source_url TEXT",
+  );
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_knowledge_kb ON knowledge_items(kb_id);
@@ -282,18 +321,64 @@ function migrate(db: Database.Database): void {
   migrateKnowledgeCards(db);
   migratePipelineCardMode(db);
   seedPlatformSkillAgents(db);
-  try {
-    db.prepare("ALTER TABLE custom_agents ADD COLUMN enabled INTEGER DEFAULT 1").run();
-  } catch {}
-  try {
-    db.prepare("ALTER TABLE topic_repository ADD COLUMN score REAL DEFAULT 90").run();
-  } catch {}
-  try {
-    db.prepare("ALTER TABLE topic_repository ADD COLUMN score_tag TEXT").run();
-  } catch {}
-  try {
-    db.prepare("ALTER TABLE topic_repository ADD COLUMN used_project_id TEXT").run();
-  } catch {}
+  ensureColumn(
+    db,
+    "custom_agents",
+    "enabled",
+    "ALTER TABLE custom_agents ADD COLUMN enabled INTEGER DEFAULT 1",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "score",
+    "ALTER TABLE topic_repository ADD COLUMN score REAL DEFAULT 90",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "score_tag",
+    "ALTER TABLE topic_repository ADD COLUMN score_tag TEXT",
+  );
+  ensureColumn(
+    db,
+    "topic_repository",
+    "used_project_id",
+    "ALTER TABLE topic_repository ADD COLUMN used_project_id TEXT",
+  );
+
+  // 选题标题唯一化：先清历史遗留重复（保留最新一条），再建 UNIQUE 索引，
+  // 让 saveTopicToRepository 的 ON CONFLICT(title) 真正兜住并发写穿。
+  db.exec(`
+    DELETE FROM topic_repository
+    WHERE id NOT IN (
+      SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY title ORDER BY created_at DESC, rowid DESC) AS rn
+        FROM topic_repository
+      ) WHERE rn = 1
+    );
+    DROP INDEX IF EXISTS idx_topic_repo_title;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_topic_repo_title_unique ON topic_repository(title);
+  `);
+}
+
+/**
+ * 当前 schema 版本号。现有全部建表/种子/加列逻辑整体视为 v1：
+ * 全部为 IF NOT EXISTS / INSERT OR IGNORE 幂等语句，未版本化前每次启动全量重放也无副作用；
+ * 存量库（user_version=0）首次启动整体重放一次并打标后，不再执行遗留体。
+ * —— 未来新迁移：在 migrate() 中追加 `if (current < N)` 块并递增 SCHEMA_VERSION，
+ *    不要在 runLegacyMigrations 里继续追加逻辑（新库会重复执行遗留体）。
+ */
+const SCHEMA_VERSION = 1;
+
+function migrate(db: Database.Database): void {
+  const current = Number(db.pragma("user_version", { simple: true }) || 0);
+  if (current < SCHEMA_VERSION) {
+    db.transaction(() => {
+      runLegacyMigrations(db);
+      db.pragma(`user_version = ${SCHEMA_VERSION}`);
+    })();
+  }
+  // —— 未来版本化迁移在此追加：if (current < 2) { ...; db.pragma("user_version = 2"); }
 }
 
 /** 5 大平台创作技能默认预设（可在编辑部 /agents 查看与微调） */
@@ -302,7 +387,8 @@ export const PLATFORM_SKILL_PRESETS = [
     id: "skill_wechat",
     stage: "wechat",
     name: "林悦读 · 微信公众号主笔",
-    persona: "爆款长文主笔，擅长生活化场景引入、痛点情绪共鸣、三段论论据与金句留白排版",
+    persona:
+      "爆款长文主笔，擅长生活化场景引入、痛点情绪共鸣、三段论论据与金句留白排版",
     system_prompt: `你是微信公众号爆款专栏主笔，擅长撰写具有深度叙事感、情绪共鸣与金句排版的优质长文。
 
 写作与排版准则：
@@ -334,7 +420,8 @@ export const PLATFORM_SKILL_PRESETS = [
     id: "skill_zhihu",
     stage: "zhihu",
     name: "知秋 · 知乎硬核答主",
-    persona: "硬核专业答主与专栏作家，擅长先亮立场、破除认知误区、底层逻辑推导与反常识思辨",
+    persona:
+      "硬核专业答主与专栏作家，擅长先亮立场、破除认知误区、底层逻辑推导与反常识思辨",
     system_prompt: `你是知乎硬核专业答主与专栏作家，擅长犀利思辨、逻辑拆解与反直觉深度论证。
 
 写作与排版准则：
@@ -364,7 +451,8 @@ export const PLATFORM_SKILL_PRESETS = [
     id: "skill_master",
     stage: "master",
     name: "陈执笔 · 通用母稿主笔",
-    persona: "出版级专栏主笔，文字老练、密度极高，擅长把论点与论据锻造成逻辑严密的出版级母稿",
+    persona:
+      "出版级专栏主笔，文字老练、密度极高，擅长把论点与论据锻造成逻辑严密的出版级母稿",
     system_prompt: `你是顶尖出版专栏主笔，基于论点与事实原料撰写严谨、深刻、结构完整的出版级母稿。
 
 写作与排版准则：
@@ -378,7 +466,8 @@ export const PLATFORM_SKILL_PRESETS = [
     id: "skill_image_gen",
     stage: "image_gen",
     name: "画魂 · 视觉配图与封面设计师",
-    persona: "AI 文生图提示词架构师与封面设计师，擅长将文字核心意象提炼为高品质 Midjourney / SD 英文提示词及视觉排版建议",
+    persona:
+      "AI 文生图提示词架构师与封面设计师，擅长将文字核心意象提炼为高品质 Midjourney / SD 英文提示词及视觉排版建议",
     system_prompt: `你是顶尖的视觉概念总监与 AI 生图提示词（Prompt）专家。根据输入的文章内容或核心主题，你的任务是提炼出最具视觉冲击力、传意精准的配图与封面方案。
 
 请输出结构化方案：
@@ -393,7 +482,8 @@ export const PLATFORM_SKILL_PRESETS = [
     id: "skill_cover",
     stage: "cover",
     name: "墨视觉 · SVG 封面美学师",
-    persona: "微信公众号 2.35:1 矢量 SVG 封面总监，擅长根据文章核心隐喻编写高质感渐变、几何图形、发光微粒与居中安全区文字排版的纯 SVG XML 代码",
+    persona:
+      "微信公众号 2.35:1 矢量 SVG 封面总监，擅长根据文章核心隐喻编写高质感渐变、几何图形、发光微粒与居中安全区文字排版的纯 SVG XML 代码",
     system_prompt: `你是顶尖的数字视觉设计师与 SVG 矢量图形代码专家，专注于为微信公众号生成标准 2.35:1 比例（viewBox="0 0 900 383"）的高质感现代封面图。
 
 核心设计准则：
@@ -416,10 +506,17 @@ export const PLATFORM_SKILL_PRESETS = [
 function seedPlatformSkillAgents(db: Database.Database): void {
   const insert = db.prepare(
     `INSERT OR IGNORE INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
-     VALUES (?, ?, ?, ?, ?, NULL, ?, 1)`
+     VALUES (?, ?, ?, ?, ?, NULL, ?, 1)`,
   );
   for (const s of PLATFORM_SKILL_PRESETS) {
-    insert.run(s.id, s.stage, s.name, s.persona, s.system_prompt, s.temperature);
+    insert.run(
+      s.id,
+      s.stage,
+      s.name,
+      s.persona,
+      s.system_prompt,
+      s.temperature,
+    );
   }
 }
 
@@ -428,20 +525,26 @@ function seedPlatformSkillAgents(db: Database.Database): void {
  * card_id 非空即卡片模式（从锁题进入）；claim_snapshot 与 brief 存 JSON。
  */
 function migratePipelineCardMode(db: Database.Database): void {
-  for (const col of ["card_id", "claim_snapshot", "brief", "target_skill", "topic_id", "snapshots"]) {
-    try {
-      db.prepare(`ALTER TABLE pipeline_projects ADD COLUMN ${col} TEXT`).run();
-    } catch {}
+  for (const col of [
+    "card_id",
+    "claim_snapshot",
+    "brief",
+    "target_skill",
+    "topic_id",
+    "snapshots",
+  ]) {
+    ensureColumn(
+      db,
+      "pipeline_projects",
+      col,
+      `ALTER TABLE pipeline_projects ADD COLUMN ${col} TEXT`,
+    );
   }
   // 锁题师工位懒播种：老库缺行时按默认值补齐（幂等）
   db.prepare(
     `INSERT OR IGNORE INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
-     VALUES ('agent_brief', 'brief', ?, ?, ?, NULL, 0.2, 1)`
-  ).run(
-    BRIEF_AGENT_NAME,
-    BRIEF_AGENT_PERSONA,
-    BRIEF_AGENT_DEFAULT_PROMPT
-  );
+     VALUES ('agent_brief', 'brief', ?, ?, ?, NULL, 0.2, 1)`,
+  ).run(BRIEF_AGENT_NAME, BRIEF_AGENT_PERSONA, BRIEF_AGENT_DEFAULT_PROMPT);
 }
 
 export const BRIEF_AGENT_NAME = "何定音 · 锁题师";
@@ -468,20 +571,37 @@ export const BRIEF_AGENT_DEFAULT_PROMPT = `你是编辑部锁题师。输入是�
  * 旧版分字段结构（one_liner/audience/... 十列）→ 合成为整卡 markdown 回填 content_md 后删除遗留列。
  */
 function migrateKnowledgeCards(db: Database.Database): void {
-  try {
-    db.prepare("ALTER TABLE knowledge_cards ADD COLUMN content_md TEXT").run();
-  } catch {}
+  ensureColumn(
+    db,
+    "knowledge_cards",
+    "content_md",
+    "ALTER TABLE knowledge_cards ADD COLUMN content_md TEXT",
+  );
 
-  // 旧版分字段数据先合成 markdown 回填（新装库无这些列，整段跳过）
-  try {
+  // 旧版分字段数据先合成 markdown 回填（新装库无 these 列，整段跳过）
+  if (hasColumn(db, "knowledge_cards", "one_liner")) {
     const legacy = db
-      .prepare("SELECT * FROM knowledge_cards WHERE content_md IS NULL AND one_liner IS NOT NULL")
+      .prepare(
+        "SELECT * FROM knowledge_cards WHERE content_md IS NULL AND one_liner IS NOT NULL",
+      )
       .all() as any[];
-    const labels: Record<string, string> = { data: "数据", case: "亲历 · 案例", counter: "反例 · 边界" };
-    const quote = (t: string) => t.split("\n").map((l) => `> ${l}`).join("\n");
+    const labels: Record<string, string> = {
+      data: "数据",
+      case: "亲历 · 案例",
+      counter: "反例 · 边界",
+    };
+    const quote = (t: string) =>
+      t
+        .split("\n")
+        .map((l) => `> ${l}`)
+        .join("\n");
     for (const r of legacy) {
-      const parse = <T,>(s: string | null, fb: T): T => {
-        try { return JSON.parse(s || "") as T; } catch { return fb; }
+      const parse = <T>(s: string | null, fb: T): T => {
+        try {
+          return JSON.parse(s || "") as T;
+        } catch {
+          return fb;
+        }
       };
       const supports = (parse<any[]>(r.supports, []) || [])
         .map((s) => `**${labels[s.type] || "支撑"}**　${s.text}`)
@@ -515,13 +635,18 @@ function migrateKnowledgeCards(db: Database.Database): void {
         `- ${sc.readyToPublish ? "✓" : "✗"} 现在能发或只差一点`,
         "",
         "# 金句 / 钩子",
-        r.golden_line ? quote(r.golden_line) : "*空 —— 写稿时再补上标题或开场。*",
+        r.golden_line
+          ? quote(r.golden_line)
+          : "*空 —— 写稿时再补上标题或开场。*",
       ].join("\n");
-      db.prepare("UPDATE knowledge_cards SET content_md = ? WHERE id = ?").run(md, r.id);
+      db.prepare("UPDATE knowledge_cards SET content_md = ? WHERE id = ?").run(
+        md,
+        r.id,
+      );
     }
-  } catch {}
+  }
 
-  // 删除遗留分字段列（SQLite 3.35+ 支持 DROP COLUMN；列不存在时静默跳过）
+  // 删除遗留分字段列（SQLite 3.35+ 支持 DROP COLUMN；仅当列存在时删除）
   for (const col of [
     "one_liner",
     "audience",
@@ -534,22 +659,30 @@ function migrateKnowledgeCards(db: Database.Database): void {
     "golden_line",
     "raw_json",
   ]) {
-    try {
+    if (hasColumn(db, "knowledge_cards", col)) {
       db.prepare(`ALTER TABLE knowledge_cards DROP COLUMN ${col}`).run();
-    } catch {}
+    }
   }
 }
 
 function seedKbs(db: Database.Database): void {
   // 检查并兼容升级现有表结构
-  try {
-    db.prepare("ALTER TABLE knowledge_items ADD COLUMN kb_id TEXT DEFAULT 'default'").run();
-  } catch {}
-  try {
-    db.prepare("ALTER TABLE documents ADD COLUMN kb_id TEXT DEFAULT 'default'").run();
-  } catch {}
+  ensureColumn(
+    db,
+    "knowledge_items",
+    "kb_id",
+    "ALTER TABLE knowledge_items ADD COLUMN kb_id TEXT DEFAULT 'default'",
+  );
+  ensureColumn(
+    db,
+    "documents",
+    "kb_id",
+    "ALTER TABLE documents ADD COLUMN kb_id TEXT DEFAULT 'default'",
+  );
 
-  const count = (db.prepare("SELECT COUNT(*) c FROM knowledge_bases").get() as { c: number }).c;
+  const count = (
+    db.prepare("SELECT COUNT(*) c FROM knowledge_bases").get() as { c: number }
+  ).c;
   if (count > 0) return;
 
   const defaultKb = {
@@ -560,12 +693,21 @@ function seedKbs(db: Database.Database): void {
   };
 
   db.prepare(
-    "INSERT INTO knowledge_bases (id, name, description, is_default) VALUES (?, ?, ?, ?)"
-  ).run(defaultKb.id, defaultKb.name, defaultKb.description, defaultKb.is_default);
+    "INSERT INTO knowledge_bases (id, name, description, is_default) VALUES (?, ?, ?, ?)",
+  ).run(
+    defaultKb.id,
+    defaultKb.name,
+    defaultKb.description,
+    defaultKb.is_default,
+  );
 }
 
 function seedPlatforms(db: Database.Database): void {
-  const count = (db.prepare("SELECT COUNT(*) c FROM platform_templates").get() as { c: number }).c;
+  const count = (
+    db.prepare("SELECT COUNT(*) c FROM platform_templates").get() as {
+      c: number;
+    }
+  ).c;
   if (count > 0) return;
 
   const platforms = [
@@ -629,15 +771,24 @@ function seedPlatforms(db: Database.Database): void {
   ];
 
   const insert = db.prepare(
-    "INSERT INTO platform_templates (id, platform_name, icon, system_prompt, output_type, is_system) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO platform_templates (id, platform_name, icon, system_prompt, output_type, is_system) VALUES (?, ?, ?, ?, ?, ?)",
   );
   for (const p of platforms) {
-    insert.run(p.id, p.platform_name, p.icon, p.system_prompt, p.output_type, p.is_system);
+    insert.run(
+      p.id,
+      p.platform_name,
+      p.icon,
+      p.system_prompt,
+      p.output_type,
+      p.is_system,
+    );
   }
 }
 
 function seedPresets(db: Database.Database): void {
-  const count = (db.prepare("SELECT COUNT(*) c FROM custom_agents").get() as { c: number }).c;
+  const count = (
+    db.prepare("SELECT COUNT(*) c FROM custom_agents").get() as { c: number }
+  ).c;
   if (count > 0) return;
 
   const presets = [
@@ -645,7 +796,8 @@ function seedPresets(db: Database.Database): void {
       id: "agent_topic",
       stage: "topic",
       name: "老赵 · 选题操盘手",
-      persona: "内容行业摸爬十年的老主编，眼光毒、出手快，擅长从一堆散乱笔记里嗅到能打的角度，专出切中痛点、自带传播力的选题",
+      persona:
+        "内容行业摸爬十年的老主编，眼光毒、出手快，擅长从一堆散乱笔记里嗅到能打的角度，专出切中痛点、自带传播力的选题",
       system_prompt: `你是编辑部资深的选题主编。用户会给你知识库中的原料笔记，或一个尚且模糊的方向。
 
 你的任务：提炼 3 个真正值得写的切入角度。判断一个好角度的标准：
@@ -667,7 +819,8 @@ function seedPresets(db: Database.Database): void {
       id: "agent_evidence",
       stage: "evidence",
       name: "小林 · 论据侦探",
-      persona: "有考据癖的资料研究员，每条论据都要问出处，擅长把知识切片与选题骨架严丝合缝地咬合，绝不放过论证薄弱点",
+      persona:
+        "有考据癖的资料研究员，每条论据都要问出处，擅长把知识切片与选题骨架严丝合缝地咬合，绝不放过论证薄弱点",
       system_prompt: `你是严谨到近乎偏执的资料研究员。用户会给你：已选定的选题命题、章节骨架，以及知识库中检索到的相关切片。
 
 你的任务：整理一份《论证备忘录》，供作者勾选确认。要求：
@@ -685,7 +838,8 @@ function seedPresets(db: Database.Database): void {
       id: "agent_draft",
       stage: "draft",
       name: "陈执笔 · 金牌主笔",
-      persona: "写稿二十年、删稿比写稿多的出版级主笔，信奉信息密度，擅长把骨架与论据锻造成逻辑严密、行云流水的长文母稿",
+      persona:
+        "写稿二十年、删稿比写稿多的出版级主笔，信奉信息密度，擅长把骨架与论据锻造成逻辑严密、行云流水的长文母稿",
       system_prompt: `你是出版级专栏主笔，文字老练、密度极高。
 
 你的输入是两种形态之一：题旨四行 + 编号素材包 [S1]…[Sn]；或选题骨架 + 论证备忘录 + 文风语调。
@@ -705,7 +859,8 @@ function seedPresets(db: Database.Database): void {
       id: "agent_review",
       stage: "review",
       name: "周主编 · 金线编审",
-      persona: "眼光毒辣的资深总编，用金线标准逐段过稿：逻辑断层、废话注水、数据存疑，一处都不放过",
+      persona:
+        "眼光毒辣的资深总编，用金线标准逐段过稿：逻辑断层、废话注水、数据存疑，一处都不放过",
       system_prompt: `你是眼光挑剔的核稿总编。对成文母稿执行四项核稿，一项不过即不通过：
 
 1. **主张是否被写大**：对照主张/题旨基准，逐段核对结论是否超出原文限定（时间、对象、范围、程度词）；
@@ -721,10 +876,19 @@ function seedPresets(db: Database.Database): void {
   ];
 
   const insert = db.prepare(
-    "INSERT INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   );
   for (const p of presets) {
-    insert.run(p.id, p.stage, p.name, p.persona, p.system_prompt, p.model, p.temperature, p.is_preset);
+    insert.run(
+      p.id,
+      p.stage,
+      p.name,
+      p.persona,
+      p.system_prompt,
+      p.model,
+      p.temperature,
+      p.is_preset,
+    );
   }
 }
 

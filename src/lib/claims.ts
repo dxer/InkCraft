@@ -15,23 +15,14 @@ export interface MediaTopic {
 export interface DocumentExtractionItem {
   id: string;
   document_id: string;
-  counter_intuition: string;      // 1. 核心反常识认知：常识假象 vs 本质真相
-  hardcore_evidence: string;      // 2. 关键硬核论据：数据点与真实商业/实战案例
-  causal_chain: string;           // 3. 底层因果链：4步机理推导模型 (A -> B -> C -> D)
-  bias_and_blindspots: string;    // 4. 潜在偏见与反脆弱盲点：隐藏假设与失效边界
-  media_topics: MediaTopic[];     // 5. 3 个自媒体切入选题 (附带 3 秒抓人 Hook 与 3 段式起草大纲)
+  counter_intuition: string; // 1. 核心反常识认知：常识假象 vs 本质真相
+  hardcore_evidence: string; // 2. 关键硬核论据：数据点与真实商业/实战案例
+  causal_chain: string; // 3. 底层因果链：4步机理推导模型 (A -> B -> C -> D)
+  bias_and_blindspots: string; // 4. 潜在偏见与反脆弱盲点：隐藏假设与失效边界
+  media_topics: MediaTopic[]; // 5. 3 个自媒体切入选题 (附带 3 秒抓人 Hook 与 3 段式起草大纲)
   raw_json?: string;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface ClaimItem {
-  id: string;
-  document_id: string;
-  claim_text: string;
-  counter_view: string | null;
-  domain_tag: string | null;
-  created_at?: string;
 }
 
 export interface MinedInsightItem {
@@ -59,7 +50,8 @@ export interface MinedInsightItem {
  */
 export async function extract5DExtractionFromDoc(
   docId: string,
-  content: string
+  content: string,
+  options: { persist?: boolean } = {},
 ): Promise<DocumentExtractionItem | null> {
   if (!content || content.trim().length < 20) {
     return null;
@@ -86,10 +78,26 @@ export async function extract5DExtractionFromDoc(
   }
 
   // 整理高密度数据结构
-  const counterIntuition = String(extracted.counter_intuition || extracted.counterIntuition || "").trim().slice(0, 600) || "【常识假象 vs 本质真相】大众往往以为工具和操作是核心，但本质上是底层认知与因果链条的闭环设计。";
-  const hardcoreEvidence = String(extracted.hardcore_evidence || extracted.hardcoreEvidence || "").trim().slice(0, 800) || "文中贯穿了具体的真实实践案例与指标验证，提供了扎实的论据支撑。";
-  const causalChain = String(extracted.causal_chain || extracted.causalChain || "").trim().slice(0, 400) || "识别认知偏差 -> 重构底层假设 -> 建立闭环系统 -> 产生复利成果";
-  const biasAndBlindspots = String(extracted.bias_and_blindspots || extracted.biasAndBlindspots || "").trim().slice(0, 600) || "【隐藏假设与失效边界】该推论默认了持续投入与低延迟反馈，在特定极端或规模化边界条件下可能面临边际效用递减。";
+  const counterIntuition =
+    String(extracted.counter_intuition || extracted.counterIntuition || "")
+      .trim()
+      .slice(0, 600) ||
+    "【常识假象 vs 本质真相】大众往往以为工具和操作是核心，但本质上是底层认知与因果链条的闭环设计。";
+  const hardcoreEvidence =
+    String(extracted.hardcore_evidence || extracted.hardcoreEvidence || "")
+      .trim()
+      .slice(0, 800) ||
+    "文中贯穿了具体的真实实践案例与指标验证，提供了扎实的论据支撑。";
+  const causalChain =
+    String(extracted.causal_chain || extracted.causalChain || "")
+      .trim()
+      .slice(0, 400) ||
+    "识别认知偏差 -> 重构底层假设 -> 建立闭环系统 -> 产生复利成果";
+  const biasAndBlindspots =
+    String(extracted.bias_and_blindspots || extracted.biasAndBlindspots || "")
+      .trim()
+      .slice(0, 600) ||
+    "【隐藏假设与失效边界】该推论默认了持续投入与低延迟反馈，在特定极端或规模化边界条件下可能面临边际效用递减。";
 
   let mediaTopics: MediaTopic[] = [];
   if (Array.isArray(extracted.media_topics || extracted.mediaTopics)) {
@@ -97,13 +105,21 @@ export async function extract5DExtractionFromDoc(
     mediaTopics = list
       .filter((t: any) => typeof t === "object" && t !== null && t.title)
       .map((t: any) => ({
-        platform: ["xiaohongshu", "wechat", "general"].includes(t.platform) ? t.platform : "general",
+        platform: ["xiaohongshu", "wechat", "general"].includes(t.platform)
+          ? t.platform
+          : "general",
         title: String(t.title).trim().slice(0, 60),
-        hook: String(t.hook || "").trim().slice(0, 100),
+        hook: String(t.hook || "")
+          .trim()
+          .slice(0, 100),
         angle: t.angle ? String(t.angle).trim().slice(0, 150) : undefined,
         outline: Array.isArray(t.outline)
           ? t.outline.map((o: any) => String(o).trim()).slice(0, 3)
-          : ["引子：核心矛盾与认知失调呈现", "展开：多维解构与事实论据交织", "升华：破局洞见与实践方法论"],
+          : [
+              "引子：核心矛盾与认知失调呈现",
+              "展开：多维解构与事实论据交织",
+              "升华：破局洞见与实践方法论",
+            ],
       }))
       .slice(0, 3);
   }
@@ -115,21 +131,33 @@ export async function extract5DExtractionFromDoc(
         title: "为什么 90% 的人都理解错了这套逻辑？",
         hook: "“别再迷信表层技巧了，底层因果链才是拉开差距的关键。”",
         angle: "直击大众常识误区，给出 3 个反直觉破局清单",
-        outline: ["认知误区：大众普遍踩中的 3 个坑", "本质拆解：真正拉开差距的底层变量", "行动清单：普通人可立即迁移的执行步骤"],
+        outline: [
+          "认知误区：大众普遍踩中的 3 个坑",
+          "本质拆解：真正拉开差距的底层变量",
+          "行动清单：普通人可立即迁移的执行步骤",
+        ],
       },
       {
         platform: "wechat",
         title: "深度长文：从本质认知到实战破局",
         hook: "“真正的竞争优势，建立在打破直觉的非共识洞察之上。”",
         angle: "破除二元对立，构建完整商业与认知框架",
-        outline: ["思想引子：表面对立背后的本质真相", "事实弹药：关键案例与推导链条解构", "落地法则：超越二元论的深层方法论"],
+        outline: [
+          "思想引子：表面对立背后的本质真相",
+          "事实弹药：关键案例与推导链条解构",
+          "落地法则：超越二元论的深层方法论",
+        ],
       },
       {
         platform: "general",
         title: "反常识法则：被忽略的关键变量",
         hook: "“一文拆解 3 个最具颠覆性的思考模型。”",
         angle: "方法论归纳与决策迁移",
-        outline: ["问题提出：为什么传统解法逐渐失效？", "因果溯源：隐藏动力学机制剖析", "终态跃迁：建立个人与业务的反脆弱系统"],
+        outline: [
+          "问题提出：为什么传统解法逐渐失效？",
+          "因果溯源：隐藏动力学机制剖析",
+          "终态跃迁：建立个人与业务的反脆弱系统",
+        ],
       },
     ];
   }
@@ -143,27 +171,45 @@ export async function extract5DExtractionFromDoc(
     media_topics: mediaTopics,
   });
 
-  // 写入 document_extractions
-  db.prepare(`
-    INSERT INTO document_extractions (
-      id, document_id, counter_intuition, hardcore_evidence, causal_chain, bias_and_blindspots, media_topics, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(document_id) DO UPDATE SET
-      counter_intuition = excluded.counter_intuition,
-      hardcore_evidence = excluded.hardcore_evidence,
-      causal_chain = excluded.causal_chain,
-      bias_and_blindspots = excluded.bias_and_blindspots,
-      media_topics = excluded.media_topics,
-      raw_json = excluded.raw_json,
-      updated_at = CURRENT_TIMESTAMP
-  `).run(id, docId, counterIntuition, hardcoreEvidence, causalChain, biasAndBlindspots, JSON.stringify(mediaTopics), rawJson);
+  // document_extractions 表归 sprout 发芽档案所有（document_id UNIQUE，last-write-wins）：
+  // 淘金补档必须 persist:false，否则会覆盖 sprout 的 raw_json，导致知识页发芽面板读到脏数据。
+  if (options.persist !== false) {
+    db.prepare(`
+      INSERT INTO document_extractions (
+        id, document_id, counter_intuition, hardcore_evidence, causal_chain, bias_and_blindspots, media_topics, raw_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(document_id) DO UPDATE SET
+        counter_intuition = excluded.counter_intuition,
+        hardcore_evidence = excluded.hardcore_evidence,
+        causal_chain = excluded.causal_chain,
+        bias_and_blindspots = excluded.bias_and_blindspots,
+        media_topics = excluded.media_topics,
+        raw_json = excluded.raw_json,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      id,
+      docId,
+      counterIntuition,
+      hardcoreEvidence,
+      causalChain,
+      biasAndBlindspots,
+      JSON.stringify(mediaTopics),
+      rawJson,
+    );
 
-  // 同步在 knowledge_claims 中存入精粹微粒（用于兼容旧索引）
-  db.prepare("DELETE FROM knowledge_claims WHERE document_id = ?").run(docId);
-  db.prepare(`
-    INSERT INTO knowledge_claims (id, document_id, claim_text, counter_view, domain_tag)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(randomUUID(), docId, counterIntuition, biasAndBlindspots, "核心认知");
+    // 同步在 knowledge_claims 中存入精粹微粒（用于兼容旧索引）
+    db.prepare("DELETE FROM knowledge_claims WHERE document_id = ?").run(docId);
+    db.prepare(`
+      INSERT INTO knowledge_claims (id, document_id, claim_text, counter_view, domain_tag)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(),
+      docId,
+      counterIntuition,
+      biasAndBlindspots,
+      "核心认知",
+    );
+  }
 
   return {
     id,
@@ -180,54 +226,14 @@ export async function extract5DExtractionFromDoc(
 /**
  * 兼容旧方法：直接委托给 5D 萃取
  */
-export async function extractClaimsFromDoc(docId: string, content: string): Promise<ClaimItem[]> {
-  const ext = await extract5DExtractionFromDoc(docId, content);
-  if (!ext) return [];
-  return [
-    {
-      id: ext.id,
-      document_id: docId,
-      claim_text: ext.counter_intuition,
-      counter_view: ext.bias_and_blindspots,
-      domain_tag: "核心认知",
-    },
-  ];
-}
-
-/**
- * 获取单篇笔记的 5 维度萃取档案
- */
-export function getDocumentExtraction(docId: string): DocumentExtractionItem | null {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM document_extractions WHERE document_id = ?")
-    .get(docId) as any;
-  if (!row) return null;
-
-  let mediaTopics: MediaTopic[] = [];
-  try {
-    mediaTopics = JSON.parse(row.media_topics);
-  } catch {}
-
-  return {
-    id: row.id,
-    document_id: row.document_id,
-    counter_intuition: row.counter_intuition,
-    hardcore_evidence: row.hardcore_evidence,
-    causal_chain: row.causal_chain,
-    bias_and_blindspots: row.bias_and_blindspots,
-    media_topics: mediaTopics,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
-
 /**
  * 全库轻量淘金：
  * 只读取各篇文档已萃取的 5 维度摘要（反常识认知、因果链与盲点），Token 消耗极低，
  * 寻找不同文章之间的思维模型对立与张力，产出高穿透力长文选题。
  */
-export async function mineInsights(options?: { kbId?: string }): Promise<MinedInsightItem[]> {
+export async function mineInsights(options?: {
+  kbId?: string;
+}): Promise<MinedInsightItem[]> {
   const db = getDb();
 
   // 1. 获取候选 5 维萃取档案（包含反常识、因果链、盲点）
@@ -252,24 +258,38 @@ export async function mineInsights(options?: { kbId?: string }): Promise<MinedIn
     doc_title: string;
   }[];
 
-  // 若不足 2 篇萃取，尝试从既有笔记自动补齐萃取
+  // 若不足 2 篇萃取，从既有笔记在内存中补齐（persist:false —— document_extractions 归 sprout，
+  // 原实现落库会覆盖 sprout 的 raw_json，导致发芽档案数据损坏）
+  const transientExtractions: typeof rawExtractions = [];
   if (rawExtractions.length < 2) {
     const unextractedNotes = db
       .prepare(`
-        SELECT id, content FROM knowledge_items 
+        SELECT id, content, title FROM knowledge_items 
         WHERE id NOT IN (SELECT document_id FROM document_extractions)
         AND chunk_index IS NULL AND length(content) > 30
         LIMIT 3
       `)
-      .all() as { id: string; content: string }[];
+      .all() as { id: string; content: string; title: string | null }[];
 
     for (const n of unextractedNotes) {
-      await extract5DExtractionFromDoc(n.id, n.content);
+      const ext = await extract5DExtractionFromDoc(n.id, n.content, {
+        persist: false,
+      });
+      if (ext) {
+        transientExtractions.push({
+          id: ext.id,
+          document_id: ext.document_id,
+          counter_intuition: ext.counter_intuition,
+          causal_chain: ext.causal_chain,
+          bias_and_blindspots: ext.bias_and_blindspots,
+          doc_title: n.title || "未命名笔记",
+        });
+      }
     }
   }
 
-  // 重新获取
-  const readyExtractions = db.prepare(extractionsQuery).all(...params) as typeof rawExtractions;
+  // 库内萃档（多为 sprout 写入）+ 本次瞬态补档合并后参与张力合成
+  const readyExtractions = [...rawExtractions, ...transientExtractions];
 
   if (readyExtractions.length < 2) {
     return getMinedInsights();
@@ -291,7 +311,7 @@ export async function mineInsights(options?: { kbId?: string }): Promise<MinedIn
       const prompt = `你是一位顶级思想专栏主编。以下是用户知识库中已提炼的【精益知识晶体档案】（每篇文章已浓缩为反常识认知、因果链与潜在盲点）：\n${JSON.stringify(
         compressedPayload,
         null,
-        2
+        2,
       )}\n\n任务要求：
 1. 深入比对不同文章的“因果链对立”或“反常识与盲点的碰撞”，找出最具张力的 2 组思想冲突。
 2. 为每组冲突锻造一个极具穿透力的长文命题与抓人解读。
@@ -309,15 +329,24 @@ export async function mineInsights(options?: { kbId?: string }): Promise<MinedIn
       if (Array.isArray(res)) {
         generated = res
           .filter(
-            (item): item is { title: string; type?: any; description: string; doc_ids?: any } =>
+            (
+              item,
+            ): item is {
+              title: string;
+              type?: any;
+              description: string;
+              doc_ids?: any;
+            } =>
               typeof item === "object" &&
               item !== null &&
               typeof (item as any).title === "string" &&
-              typeof (item as any).description === "string"
+              typeof (item as any).description === "string",
           )
           .map((item) => {
             const validDocIds = Array.isArray(item.doc_ids)
-              ? item.doc_ids.filter((did) => readyExtractions.some((re) => re.document_id === did))
+              ? item.doc_ids.filter((did) =>
+                  readyExtractions.some((re) => re.document_id === did),
+                )
               : [];
             return {
               title: String(item.title).trim().slice(0, 100),
@@ -325,12 +354,21 @@ export async function mineInsights(options?: { kbId?: string }): Promise<MinedIn
                 ? item.type
                 : "tension",
               description: String(item.description).trim().slice(0, 500),
-              doc_ids: validDocIds.length > 0 ? validDocIds : [readyExtractions[0].document_id, readyExtractions[1].document_id],
+              doc_ids:
+                validDocIds.length > 0
+                  ? validDocIds
+                  : [
+                      readyExtractions[0].document_id,
+                      readyExtractions[1].document_id,
+                    ],
             };
           });
       }
     } catch (err) {
-      console.warn("[claims] Light-weight mining LLM call failed, fallback:", err);
+      console.warn(
+        "[claims] Light-weight mining LLM call failed, fallback:",
+        err,
+      );
     }
   }
 
@@ -361,7 +399,7 @@ export async function mineInsights(options?: { kbId?: string }): Promise<MinedIn
       item.title,
       item.type || "tension",
       item.description,
-      JSON.stringify(item.doc_ids || [])
+      JSON.stringify(item.doc_ids || []),
     );
   }
 
@@ -419,7 +457,9 @@ export function getMinedInsights(status?: string): MinedInsightItem[] {
   >();
 
   if (allDocIds.size > 0) {
-    const placeholders = Array.from(allDocIds).map(() => "?").join(",");
+    const placeholders = Array.from(allDocIds)
+      .map(() => "?")
+      .join(",");
     const details = db
       .prepare(`
         SELECT ki.id as documentId, ki.title as documentTitle,
@@ -430,11 +470,11 @@ export function getMinedInsights(status?: string): MinedInsightItem[] {
         WHERE ki.id IN (${placeholders})
       `)
       .all(...Array.from(allDocIds)) as {
-        documentId: string;
-        documentTitle: string;
-        counterIntuition: string;
-        causalChain: string;
-      }[];
+      documentId: string;
+      documentTitle: string;
+      counterIntuition: string;
+      causalChain: string;
+    }[];
 
     details.forEach((d) => extractionDetailMap.set(d.documentId, d));
   }
@@ -473,11 +513,14 @@ export function getMinedInsights(status?: string): MinedInsightItem[] {
  */
 export function updateMinedInsight(
   id: string,
-  updates: { status?: "unread" | "starred" | "used" }
+  updates: { status?: "unread" | "starred" | "used" },
 ): void {
   const db = getDb();
   if (updates.status) {
-    db.prepare("UPDATE mined_insights SET status = ? WHERE id = ?").run(updates.status, id);
+    db.prepare("UPDATE mined_insights SET status = ? WHERE id = ?").run(
+      updates.status,
+      id,
+    );
   }
 }
 
@@ -527,7 +570,7 @@ const MINE_INSIGHTS_SYSTEM =
 async function callLlmJsonObject(
   cfg: ByokConfig,
   system: string,
-  prompt: string
+  prompt: string,
 ): Promise<Record<string, unknown> | null> {
   const provider = createOpenAICompatible({
     name: "inkcraft",
@@ -554,7 +597,7 @@ async function callLlmJsonObject(
 async function callLlmJsonArray(
   cfg: ByokConfig,
   system: string,
-  prompt: string
+  prompt: string,
 ): Promise<unknown[] | null> {
   const provider = createOpenAICompatible({
     name: "inkcraft",
@@ -578,40 +621,60 @@ async function callLlmJsonArray(
   }
 }
 
-function generateFallback5DExtraction(content: string): Record<string, unknown> {
+function generateFallback5DExtraction(
+  content: string,
+): Record<string, unknown> {
   const lines = content
     .split(/\n+/)
     .map((l) => l.trim())
-    .filter((l) => l.length >= 15 && !l.startsWith("#") && !l.startsWith("http"));
+    .filter(
+      (l) => l.length >= 15 && !l.startsWith("#") && !l.startsWith("http"),
+    );
   const first = lines[0] || "表层的通用技巧往往掩盖了更底层的因果闭环机制";
-  const mid = lines[Math.floor(lines.length / 2)] || "关键在于建立可复现的验证链条与反馈闭环";
+  const mid =
+    lines[Math.floor(lines.length / 2)] ||
+    "关键在于建立可复现的验证链条与反馈闭环";
 
   return {
     counter_intuition: `【常识假象 vs 本质真相】大众往往误以为解决问题的关键在于堆叠工具与动作，但本质机理是：『${first.slice(0, 90)}』，单点的经验模仿往往在复杂系统面前失效。`,
     hardcore_evidence: `【写作事实弹药库】文中以真实业务与实践场景作为关键支撑：「${mid.slice(0, 120)}」，验证了认知模型在实际推进中的演进路径与边界约束。`,
-    causal_chain: "识别系统隐性痛点 -> 破除直觉线性假设 -> 引入因果闭环机制 -> 放大网络复利价值",
-    bias_and_blindspots: "【隐藏假设与失效边界】该论断默认了执行主体具备充足的初始资源与低试错成本，在强外部不确定性或重度受限的场景下可能产生次生摩擦。",
+    causal_chain:
+      "识别系统隐性痛点 -> 破除直觉线性假设 -> 引入因果闭环机制 -> 放大网络复利价值",
+    bias_and_blindspots:
+      "【隐藏假设与失效边界】该论断默认了执行主体具备充足的初始资源与低试错成本，在强外部不确定性或重度受限的场景下可能产生次生摩擦。",
     media_topics: [
       {
         platform: "xiaohongshu",
         title: "为什么 90% 的人都理解错了这套底层逻辑？",
         hook: "“别再迷信表层技巧了，底层因果链才是拉开差距的关键。”",
         angle: "破除 3 大直觉误区，给出实战避坑清单",
-        outline: ["常识误区：为什么勤奋反而带来低产出？", "本质拆解：拉开差距的关键动力学机制", "避坑指南：普通人可立即迁移的 3 步行动闭环"],
+        outline: [
+          "常识误区：为什么勤奋反而带来低产出？",
+          "本质拆解：拉开差距的关键动力学机制",
+          "避坑指南：普通人可立即迁移的 3 步行动闭环",
+        ],
       },
       {
         platform: "wechat",
         title: "深度长文：从第一性原理重构个人与业务竞争壁垒",
         hook: "“真正的壁垒不在于占有多少资源，而在于打破常识的非共识洞察。”",
         angle: "破除二元对立框架，系统化推演破局方法论",
-        outline: ["引子：表面繁荣下的系统性逻辑断层", "解构：关键案例支撑与 4 步因果链推导", "重塑：超越二元对立的长效发展法则"],
+        outline: [
+          "引子：表面繁荣下的系统性逻辑断层",
+          "解构：关键案例支撑与 4 步因果链推导",
+          "重塑：超越二元对立的长效发展法则",
+        ],
       },
       {
         platform: "general",
         title: "反常识法则：被普遍忽略的底层决定性变量",
         hook: "“一文拆解最具穿透力的思维与商业推演模型。”",
         angle: "本质归因与高阶决策模型迁移",
-        outline: ["现象观察：传统线性路径为什么正在失效？", "因果溯源：隐藏动力学与核心反常识认知", "决策跃迁：建立自适应反脆弱系统的操作指南"],
+        outline: [
+          "现象观察：传统线性路径为什么正在失效？",
+          "因果溯源：隐藏动力学与核心反常识认知",
+          "决策跃迁：建立自适应反脆弱系统的操作指南",
+        ],
       },
     ],
   };

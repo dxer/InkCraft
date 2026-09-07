@@ -4,12 +4,9 @@ import {
   ArrowDownUp,
   Check,
   ChevronDown,
-  Download,
-  Edit3,
   FileCode,
   FileText,
   Folder,
-  FolderMinus,
   FolderPlus,
   FolderInput,
   IdCard,
@@ -17,11 +14,9 @@ import {
   ListChecks,
   Loader2,
   Microscope,
-  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  RefreshCw,
   Search,
   Send,
   ShieldQuestion,
@@ -31,7 +26,6 @@ import {
   Trash2,
   Upload,
   X,
-  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -49,42 +43,10 @@ import { ImportDialog } from "../import-dialog";
 import { LinkDialog } from "../link-dialog";
 import { MoveNotesDialog } from "../move-notes-dialog";
 import { NewKbDialog } from "../new-kb-dialog";
+import { NoteListItem } from "../note-list-item";
+import { SproutPanel } from "../sprout-panel";
 import type { SproutResult } from "@/lib/sprout";
 import type { KnowledgeBase, NoteItem } from "@/lib/types";
-
-function formatCompactTime(raw: string): string {
-  if (!raw) return "";
-  const d = new Date(raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`);
-  if (Number.isNaN(d.getTime())) return raw;
-
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSecs < 60 && diffSecs >= 0) {
-    return "刚刚";
-  }
-  if (diffMins < 60 && diffMins > 0) {
-    return `${diffMins} 分钟前`;
-  }
-  if (diffHours < 24 && diffHours > 0) {
-    return `${diffHours} 小时前`;
-  }
-  if (diffDays === 1) {
-    return "昨天";
-  }
-  if (diffDays < 7 && diffDays > 1) {
-    return `${diffDays} 天前`;
-  }
-
-  if (d.getFullYear() === now.getFullYear()) {
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  }
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
 
 export default function KnowledgeDetailPage() {
   const params = useParams();
@@ -542,7 +504,8 @@ export default function KnowledgeDetailPage() {
     const currentContent = editingContent.trim();
     const originalTitle = (selectedNote.title || "").trim();
     const originalContent = (selectedNote.content || "").trim();
-    if (currentTitle === originalTitle && currentContent === originalContent) return;
+    if (currentTitle === originalTitle && currentContent === originalContent)
+      return;
     if (!currentContent) return;
 
     setSavingNote(true);
@@ -1171,151 +1134,36 @@ export default function KnowledgeDetailPage() {
                 暂无笔记
               </div>
             ) : (
-              filteredNotes.map((n) => {
-                const isSelected = selectedNote?.id === n.id;
-                const isChecked = selectedNoteIds.has(n.id);
-
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => {
-                      if (isMultiSelectMode) {
-                        toggleNoteSelect(n.id);
-                      } else {
-                        selectNoteItem(n);
-                      }
-                    }}
-                    className={`group relative flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left cursor-pointer transition-all ${
-                      isSelected
-                        ? "bg-primary/10 text-primary font-medium shadow-2xs border border-primary/20"
-                        : "hover:bg-muted/60 text-foreground"
-                    }`}
-                  >
-                    {/* 左侧图标与文本内容 */}
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <FileText className="size-3.5 shrink-0 text-muted-foreground/80" />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground leading-tight">
-                          {n.title || "未命名笔记"}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground/75 leading-none mt-0.5">
-                          {formatCompactTime(n.createdAt)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 右侧：多选模式下显示复选框；普通模式下显示三点菜单 */}
-                    {isMultiSelectMode ? (
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleNoteSelect(n.id);
-                        }}
-                        className={`size-4 rounded border flex items-center justify-center transition-all shrink-0 ${
-                          isChecked
-                            ? "bg-primary border-primary text-primary-foreground"
-                            : "border-muted-foreground/40 bg-background hover:border-primary"
-                        }`}
-                      >
-                        {isChecked && <Check className="size-3" />}
-                      </div>
-                    ) : (
-                      <div className="relative shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuNoteId((prev) =>
-                              prev === n.id ? null : n.id,
-                            );
-                          }}
-                          className={`size-6 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-all ${
-                            menuNoteId === n.id
-                              ? "opacity-100 bg-muted text-foreground"
-                              : "opacity-0 group-hover:opacity-100"
-                          }`}
-                          title="更多操作"
-                        >
-                          <MoreHorizontal className="size-3.5" />
-                        </button>
-
-                        {/* 弹出菜单 */}
-                        {menuNoteId === n.id && (
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 top-full mt-1 z-30 w-36 overflow-hidden rounded-lg border bg-popover/95 p-1 shadow-xl backdrop-blur-md ring-1 ring-black/5 animate-in fade-in-0 zoom-in-95 duration-100 text-xs"
-                          >
-                            <button
-                              onClick={(e) => handleQuickDraft(n, e)}
-                              title="以该素材为骨架直接进入起草工位，跳过选题与匹配"
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                            >
-                              <Zap className="size-3.5 text-primary" />
-                              <span>直接成稿</span>
-                            </button>
-
-                            <div className="my-0.5 h-px bg-border/60" />
-
-                            <button
-                              onClick={(e) => handleExportMarkdown(n, e)}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
-                            >
-                              <Download className="size-3.5 text-muted-foreground" />
-                              <span>导出 Markdown</span>
-                            </button>
-
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuNoteId(null);
-                                setNoteToEdit(n);
-                                setEditDialogOpen(true);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
-                            >
-                              <Edit3 className="size-3.5 text-muted-foreground" />
-                              <span>编辑属性</span>
-                            </button>
-
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuNoteId(null);
-                                setMovingNoteIds([n.id]);
-                                setMoveDialogOpen(true);
-                              }}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
-                            >
-                              <FolderInput className="size-3.5 text-muted-foreground" />
-                              <span>移动到...</span>
-                            </button>
-
-                            {!kb?.isDefault && (
-                              <button
-                                onClick={(e) => handleRemoveFromKb(n.id, e)}
-                                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
-                              >
-                                <FolderMinus className="size-3.5 text-muted-foreground" />
-                                <span>移出知识库</span>
-                              </button>
-                            )}
-
-                            <div className="my-0.5 h-px bg-border/60" />
-
-                            <button
-                              onClick={(e) => triggerDeleteSingle(n, e)}
-                              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                            >
-                              <Trash2 className="size-3.5" />
-                              <span>删除笔记</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+              filteredNotes.map((n) => (
+                <NoteListItem
+                  key={n.id}
+                  note={n}
+                  isSelected={selectedNote?.id === n.id}
+                  isChecked={selectedNoteIds.has(n.id)}
+                  isMultiSelectMode={isMultiSelectMode}
+                  menuOpen={menuNoteId === n.id}
+                  showRemoveFromKb={!kb?.isDefault}
+                  onSelect={selectNoteItem}
+                  onToggleSelect={toggleNoteSelect}
+                  onToggleMenu={(noteId) =>
+                    setMenuNoteId((prev) => (prev === noteId ? null : noteId))
+                  }
+                  onQuickDraft={handleQuickDraft}
+                  onExportMarkdown={handleExportMarkdown}
+                  onEdit={(note) => {
+                    setMenuNoteId(null);
+                    setNoteToEdit(note);
+                    setEditDialogOpen(true);
+                  }}
+                  onMove={(note) => {
+                    setMenuNoteId(null);
+                    setMovingNoteIds([note.id]);
+                    setMoveDialogOpen(true);
+                  }}
+                  onRemoveFromKb={handleRemoveFromKb}
+                  onDelete={triggerDeleteSingle}
+                />
+              ))
             )}
           </div>
 
@@ -1379,7 +1227,9 @@ export default function KnowledgeDetailPage() {
                   rows={1}
                   value={editingTitle}
                   onChange={(e) =>
-                    setEditingTitle(e.target.value.replace(/\s*[\r\n]+\s*/g, " "))
+                    setEditingTitle(
+                      e.target.value.replace(/\s*[\r\n]+\s*/g, " "),
+                    )
                   }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -1671,216 +1521,13 @@ export default function KnowledgeDetailPage() {
                     minHeight="560px"
                   />
                 ) : (
-                  <div className="space-y-4 py-2">
-                    {/* 得到大脑级：智鉴 (知识发芽 Sprout) 档案 */}
-                    <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-card via-muted/10 to-muted/25 p-6 space-y-5 shadow-xs">
-                      <div className="flex items-center justify-between border-b border-border/40 pb-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            <Sprout className="size-4.5" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-foreground tracking-tight flex items-center gap-2">
-                              <span>智鉴 · 知识发芽档案 (Sprout)</span>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] font-normal px-1.5 py-0 h-4 text-emerald-600 border-emerald-500/30"
-                              >
-                                灵感生根
-                              </Badge>
-                            </h3>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              以本篇笔记为「种子」，跨库检索知识养料，叙事型思考教练讲透它的来路与去处
-                            </p>
-                          </div>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleReSprout}
-                          disabled={reSprouting || sproutLoading}
-                          className="h-7 px-2.5 text-xs gap-1.5 rounded-md shadow-2xs"
-                        >
-                          <RefreshCw
-                            className={`size-3 ${reSprouting ? "animate-spin" : ""}`}
-                          />
-                          <span>
-                            {reSprouting ? "正在发散发芽..." : "重新知识发芽"}
-                          </span>
-                        </Button>
-                      </div>
-
-                      {sproutLoading ? (
-                        <div className="flex flex-col items-center justify-center gap-2 py-12 text-xs text-muted-foreground">
-                          <Loader2 className="size-5 animate-spin text-emerald-600" />
-                          <span>
-                            正在跨库检索知识养料，思考教练讲故事的功力全开...
-                          </span>
-                        </div>
-                      ) : sprout ? (
-                        <div className="space-y-5 text-xs">
-                          {/* 开场解读 */}
-                          <p className="border-l-2 border-emerald-500/40 pl-4 text-[13px] leading-relaxed text-foreground/90">
-                            {sprout.opening}
-                          </p>
-
-                          {/* 发芽画卷 */}
-                          {sprout.sprouts.map((s, idx) => {
-                            const relatedNotes = (
-                              sprout.material_mappings || []
-                            ).filter((m) =>
-                              (s.related_doc_ids || []).includes(m.documentId),
-                            );
-                            return (
-                              <div
-                                key={idx}
-                                className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-5 shadow-2xs"
-                              >
-                                <div className="flex items-baseline gap-2.5">
-                                  <span className="text-lg font-bold tabular-nums text-foreground/20">
-                                    {String(idx + 1).padStart(2, "0")}
-                                  </span>
-                                  <h4 className="text-sm font-semibold tracking-tight text-foreground">
-                                    {s.title}
-                                  </h4>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                    <Sprout className="size-3" />
-                                    种子
-                                  </span>
-                                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/85">
-                                    {s.seed}
-                                  </p>
-                                  {relatedNotes.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5 pt-1">
-                                      {relatedNotes.map((m) => (
-                                        <Badge
-                                          key={m.documentId}
-                                          variant="outline"
-                                          className="max-w-52 truncate text-[10px] font-normal text-muted-foreground"
-                                        >
-                                          《{m.documentTitle}》
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {s.aha_moment && (
-                                  <div className="border-l-2 border-amber-400/60 bg-amber-500/[0.06] px-3.5 py-2.5 text-[13px] italic leading-relaxed text-foreground">
-                                    <span className="mr-1.5 inline-flex items-center gap-1 font-semibold not-italic text-amber-600 dark:text-amber-400">
-                                      <Sparkles className="size-3" />
-                                      Aha 瞬间
-                                    </span>
-                                    {s.aha_moment}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {/* 金句回响 */}
-                          {sprout.quote_echo &&
-                            (sprout.quote_echo.original ||
-                              (sprout.quote_echo.perspectives || []).length >
-                                0) && (
-                              <div className="space-y-3 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.05] to-transparent p-5">
-                                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                  金句回响 · Echoes
-                                </div>
-                                {sprout.quote_echo.original && (
-                                  <p className="text-[13px] font-medium leading-relaxed text-foreground">
-                                    “{sprout.quote_echo.original}”
-                                    <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-                                      —— 笔记原话
-                                    </span>
-                                  </p>
-                                )}
-                                {(sprout.quote_echo.perspectives || []).map(
-                                  (p, i) => (
-                                    <div key={i} className="space-y-0.5">
-                                      <div className="text-[11px] font-semibold text-primary/80">
-                                        {p.label}
-                                      </div>
-                                      <p className="text-[12px] leading-relaxed text-foreground/80">
-                                        “{p.quote}”
-                                        <span className="text-muted-foreground">
-                                          {" "}
-                                          —— {p.author}
-                                        </span>
-                                      </p>
-                                    </div>
-                                  ),
-                                )}
-                              </div>
-                            )}
-
-                          {/* 底部动作 */}
-                          <div className="flex items-center justify-between border-t border-border/40 pt-3.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const report = [
-                                  "【智鉴发芽报告】",
-                                  "",
-                                  sprout.opening,
-                                  "",
-                                  ...sprout.sprouts.flatMap((s, i) => [
-                                    `${String(i + 1).padStart(2, "0")}. ${s.title}`,
-                                    `🌱 种子：${s.seed}`,
-                                    s.aha_moment
-                                      ? `✨ Aha 瞬间：${s.aha_moment}`
-                                      : "",
-                                    "",
-                                  ]),
-                                  sprout.quote_echo?.original
-                                    ? `金句回响：${sprout.quote_echo.original}`
-                                    : "",
-                                  ...(
-                                    sprout.quote_echo?.perspectives || []
-                                  ).map(
-                                    (p) =>
-                                      `· ${p.label}：「${p.quote}」—— ${p.author}`,
-                                  ),
-                                ]
-                                  .filter(Boolean)
-                                  .join("\n");
-                                navigator.clipboard.writeText(report);
-                              }}
-                              className="text-[10px] text-muted-foreground hover:text-foreground"
-                            >
-                              复制完整发芽报告
-                            </button>
-
-                            <Button
-                              size="sm"
-                              onClick={() => handleSendSproutToWorkshop(sprout)}
-                              className="h-7 gap-1.5 rounded-md bg-foreground px-3 text-xs font-semibold text-background shadow-xs hover:bg-foreground/90"
-                            >
-                              <Sparkles className="size-3.5" />🚀
-                              一键以此大纲装配长文 (自动挂载素材)
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-3 py-10 text-center text-xs text-muted-foreground">
-                          <p>当前笔记尚未进行「智鉴发芽」</p>
-                          <Button
-                            size="sm"
-                            onClick={handleReSprout}
-                            disabled={reSprouting}
-                            className="gap-1.5 bg-foreground text-xs font-semibold text-background hover:bg-foreground/90"
-                          >
-                            <Sprout className="size-3.5" />
-                            立即启动知识发芽 (Sprout)
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <SproutPanel
+                    sprout={sprout}
+                    sproutLoading={sproutLoading}
+                    reSprouting={reSprouting}
+                    onReSprout={handleReSprout}
+                    onSendToWorkshop={handleSendSproutToWorkshop}
+                  />
                 )}
               </div>
 

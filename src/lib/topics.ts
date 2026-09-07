@@ -5,7 +5,7 @@ import { parseCardFields } from "./card-md";
 import { getDb } from "./db";
 import { getAgentForStage } from "./pipeline";
 import { getByok, getSettings, setSetting } from "./settings";
-import { PLATFORM_SKILLS, type PlatformSkillId, type TopicRepositoryItem } from "./types";
+import { type PlatformSkillId, type TopicRepositoryItem } from "./types";
 
 export interface TopicFilterOptions {
   status?: "all" | "idea" | "used" | "archived";
@@ -27,6 +27,9 @@ export interface TopicStats {
 }
 
 const SETTING_KEY_LAST_SCANNED = "topic_mining.last_scanned_at";
+// 挖掘运行锁：用 DB 标志位而非模块变量 —— instrumentation 定时器与路由 handler 属于不同 bundle，
+// 模块级状态互不可见；DB 标志对二者同时生效，防并发挖掘烧双份 Token。
+const SETTING_KEY_MINING_LOCK = "topic_mining.lock_at";
 
 const SKILL_NAME_MAP: Record<PlatformSkillId, string> = {
   wechat: "微信公众号 · 深度叙事",
@@ -36,12 +39,24 @@ const SKILL_NAME_MAP: Record<PlatformSkillId, string> = {
   master: "通用母稿 · 严谨立论",
 };
 
-function computeDefaultScore(title: string, skill: string, matchedCardsCount: number): { score: number; scoreTag: string } {
+function computeDefaultScore(
+  title: string,
+  skill: string,
+  matchedCardsCount: number,
+): { score: number; scoreTag: string } {
   let score = 90;
   if (title.length >= 15 && title.length <= 35) score += 3;
   if (matchedCardsCount >= 2) score += 3;
   if (matchedCardsCount >= 1) score += 1;
-  if (title.includes("？") || title.includes("！") || title.includes("：") || title.includes("——") || title.includes("90%") || title.includes("为什么")) score += 1;
+  if (
+    title.includes("？") ||
+    title.includes("！") ||
+    title.includes("：") ||
+    title.includes("——") ||
+    title.includes("90%") ||
+    title.includes("为什么")
+  )
+    score += 1;
   score = Math.min(score, 98);
 
   let tag = "🔥 爆款潜质";
@@ -53,26 +68,68 @@ function computeDefaultScore(title: string, skill: string, matchedCardsCount: nu
   return { score, scoreTag: tag };
 }
 
+/** 语料进 Prompt 前统一截断，控住单次挖掘的 Token 上限 */
+function clip(v: unknown, max: number): string {
+  return String(v ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
 /** 从数据库映射选题条目 */
-function mapTopicRow(row: any): TopicRepositoryItem {
-  let outline: string[] = [];
+/** JSON.parse 容错：空值/坏 JSON 返回 fallback，不让存量脏字段炸读取路径 */
+function parseJsonField<T>(raw: unknown, fallback: T): T {
+  if (!raw) return fallback;
   try {
-    outline = row.outline ? JSON.parse(row.outline) : [];
-  } catch {}
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? (parsed as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-  let matchedCards: any[] = [];
-  try {
-    matchedCards = row.matched_cards ? JSON.parse(row.matched_cards) : [];
-  } catch {}
+/** 从数据库映射选题条目 */
+/** topic_repository 行结构（SELECT 全列时与 mapTopicRow 一一对应） */
+interface TopicRow {
+  id: string;
+  title: string;
+  angle: string | null;
+  hook: string | null;
+  target_skill: string | null;
+  score: number | null;
+  score_tag: string | null;
+  outline: string | null;
+  matched_cards: string | null;
+  source_note_ids: string | null;
+  source_type: string | null;
+  status: string | null;
+  used_project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-  let sourceNoteIds: string[] = [];
-  try {
-    sourceNoteIds = row.source_note_ids ? JSON.parse(row.source_note_ids) : [];
-  } catch {}
+/** LLM 返回的原始选题 JSON（字段值未经清洗，落库前逐项校验） */
+interface RawGeneratedTopic {
+  title?: unknown;
+  angle?: unknown;
+  hook?: unknown;
+  targetSkill?: unknown;
+  outline?: unknown;
+  materialIndices?: unknown;
+}
+
+function mapTopicRow(row: TopicRow): TopicRepositoryItem {
+  const outline: string[] = parseJsonField(row.outline, []);
+  const matchedCards: TopicRepositoryItem["matchedCards"] = parseJsonField(
+    row.matched_cards,
+    [],
+  );
+  const sourceNoteIds: string[] = parseJsonField(row.source_note_ids, []);
 
   const skill = (row.target_skill || "wechat") as PlatformSkillId;
   const def = computeDefaultScore(row.title || "", skill, matchedCards.length);
-  const score = typeof row.score === "number" && row.score > 0 ? row.score : def.score;
+  const score =
+    typeof row.score === "number" && row.score > 0 ? row.score : def.score;
   const scoreTag = row.score_tag || def.scoreTag;
 
   return {
@@ -96,10 +153,12 @@ function mapTopicRow(row: any): TopicRepositoryItem {
 }
 
 /** 获取选题列表 */
-export function getTopicsFromDb(options: TopicFilterOptions = {}): TopicRepositoryItem[] {
+export function getTopicsFromDb(
+  options: TopicFilterOptions = {},
+): TopicRepositoryItem[] {
   const db = getDb();
   const conditions: string[] = [];
-  const params: any[] = [];
+  const params: Array<string | number> = [];
 
   if (options.status && options.status !== "all") {
     conditions.push("status = ?");
@@ -122,7 +181,8 @@ export function getTopicsFromDb(options: TopicFilterOptions = {}): TopicReposito
     params.push(kw, kw);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const limitClause = options.limit ? `LIMIT ${Number(options.limit)}` : "";
   const offsetClause = options.offset ? `OFFSET ${Number(options.offset)}` : "";
 
@@ -134,7 +194,7 @@ export function getTopicsFromDb(options: TopicFilterOptions = {}): TopicReposito
     ${limitClause} ${offsetClause}
   `;
 
-  const rows = db.prepare(query).all(...params);
+  const rows = db.prepare(query).all(...params) as TopicRow[];
   return rows.map(mapTopicRow);
 }
 
@@ -144,12 +204,30 @@ export function getTopicStats(): TopicStats {
   const settings = getSettings();
   const lastScannedAt = settings[SETTING_KEY_LAST_SCANNED] || null;
 
-  const totalRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository").get() as { count: number };
-  const ideasRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'idea'").get() as { count: number };
-  const usedRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'used'").get() as { count: number };
-  const archivedRow = db.prepare("SELECT COUNT(*) as count FROM topic_repository WHERE status = 'archived'").get() as { count: number };
+  const totalRow = db
+    .prepare("SELECT COUNT(*) as count FROM topic_repository")
+    .get() as { count: number };
+  const ideasRow = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM topic_repository WHERE status = 'idea'",
+    )
+    .get() as { count: number };
+  const usedRow = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM topic_repository WHERE status = 'used'",
+    )
+    .get() as { count: number };
+  const archivedRow = db
+    .prepare(
+      "SELECT COUNT(*) as count FROM topic_repository WHERE status = 'archived'",
+    )
+    .get() as { count: number };
 
-  const skillRows = db.prepare("SELECT target_skill, COUNT(*) as count FROM topic_repository GROUP BY target_skill").all() as { target_skill: string; count: number }[];
+  const skillRows = db
+    .prepare(
+      "SELECT target_skill, COUNT(*) as count FROM topic_repository GROUP BY target_skill",
+    )
+    .all() as { target_skill: string; count: number }[];
   const bySkill: Record<string, number> = {};
   for (const r of skillRows) {
     bySkill[r.target_skill] = r.count;
@@ -158,14 +236,18 @@ export function getTopicStats(): TopicStats {
   // 统计自上次扫描以来新增的独立笔记数量
   let newNotesCount = 0;
   if (lastScannedAt) {
-    const newNotesRow = db.prepare(
-      "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ?"
-    ).get(lastScannedAt) as { count: number };
+    const newNotesRow = db
+      .prepare(
+        "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ?",
+      )
+      .get(lastScannedAt) as { count: number };
     newNotesCount = newNotesRow?.count || 0;
   } else {
-    const allNotesRow = db.prepare(
-      "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL"
-    ).get() as { count: number };
+    const allNotesRow = db
+      .prepare(
+        "SELECT COUNT(*) as count FROM knowledge_items WHERE chunk_index IS NULL",
+      )
+      .get() as { count: number };
     newNotesCount = allNotesRow?.count || 0;
   }
 
@@ -185,7 +267,7 @@ export function getTopicStats(): TopicStats {
  * 若已存在相同标题的选题，则跳过或合并更新，杜绝重复产生。
  */
 export function saveTopicToRepository(
-  item: Partial<TopicRepositoryItem> & { title: string }
+  item: Partial<TopicRepositoryItem> & { title: string },
 ): { topic: TopicRepositoryItem; created: boolean } {
   const db = getDb();
   const cleanTitle = item.title.trim();
@@ -194,8 +276,10 @@ export function saveTopicToRepository(
   }
 
   const existing = db
-    .prepare("SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?")
-    .get(cleanTitle);
+    .prepare(
+      "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?",
+    )
+    .get(cleanTitle) as TopicRow | undefined;
 
   if (existing) {
     return {
@@ -206,8 +290,13 @@ export function saveTopicToRepository(
 
   const id = item.id || randomUUID();
   const targetSkill = item.targetSkill || "wechat";
-  const def = computeDefaultScore(cleanTitle, targetSkill, (item.matchedCards || []).length);
-  const score = typeof item.score === "number" && item.score > 0 ? item.score : def.score;
+  const def = computeDefaultScore(
+    cleanTitle,
+    targetSkill,
+    (item.matchedCards || []).length,
+  );
+  const score =
+    typeof item.score === "number" && item.score > 0 ? item.score : def.score;
   const scoreTag = item.scoreTag || def.scoreTag;
   const outlineJson = JSON.stringify(item.outline || []);
   const matchedCardsJson = JSON.stringify(item.matchedCards || []);
@@ -215,54 +304,82 @@ export function saveTopicToRepository(
   const sourceType = item.sourceType || "manual";
   const status = item.status || "idea";
 
-  db.prepare(`
+  const insertRes = db
+    .prepare(`
     INSERT INTO topic_repository (
       id, title, angle, hook, target_skill, score, score_tag, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `).run(
-    id,
-    cleanTitle,
-    item.angle || "",
-    item.hook || "",
-    targetSkill,
-    score,
-    scoreTag,
-    outlineJson,
-    matchedCardsJson,
-    sourceNoteIdsJson,
-    sourceType,
-    status
-  );
+    ON CONFLICT(title) DO NOTHING
+  `)
+    .run(
+      id,
+      cleanTitle,
+      item.angle || "",
+      item.hook || "",
+      targetSkill,
+      score,
+      scoreTag,
+      outlineJson,
+      matchedCardsJson,
+      sourceNoteIdsJson,
+      sourceType,
+      status,
+    );
 
-  const inserted = db
-    .prepare("SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE id = ?")
-    .get(id);
+  // 正常情况下上面的 SELECT 已挡掉重复；ON CONFLICT 只兜并发写穿（极窄窗口），
+  // 此时按标题回查已有行并标记未新建。
+  const inserted =
+    (db
+      .prepare(
+        "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE id = ?",
+      )
+      .get(id) as TopicRow) ||
+    (db
+      .prepare(
+        "SELECT id, title, angle, hook, target_skill, outline, matched_cards, source_note_ids, source_type, status, created_at, updated_at FROM topic_repository WHERE title = ?",
+      )
+      .get(cleanTitle) as TopicRow);
 
   return {
     topic: mapTopicRow(inserted),
-    created: true,
+    created: insertRes.changes > 0,
   };
 }
 
 /** 批量保存选题到选题库 */
 export function batchSaveTopicsToRepository(
-  items: Array<Partial<TopicRepositoryItem> & { title: string }>
+  items: Array<Partial<TopicRepositoryItem> & { title: string }>,
 ): { savedCount: number; topics: TopicRepositoryItem[] } {
-  const results: TopicRepositoryItem[] = [];
-  let savedCount = 0;
-  for (const item of items) {
-    if (!item.title || !item.title.trim()) continue;
-    const { topic, created } = saveTopicToRepository(item);
-    results.push(topic);
-    if (created) savedCount++;
-  }
+  const db = getDb();
+  // 批量保存包进事务：中途失败整体回滚，不留半批落库
+  const runBatch = db.transaction(
+    (list: Array<Partial<TopicRepositoryItem> & { title: string }>) => {
+      const results: TopicRepositoryItem[] = [];
+      let savedCount = 0;
+      for (const item of list) {
+        if (!item.title || !item.title.trim()) continue;
+        const { topic, created } = saveTopicToRepository(item);
+        results.push(topic);
+        if (created) savedCount++;
+      }
+      return { results, savedCount };
+    },
+  );
+  const { results, savedCount } = runBatch(items);
   return { savedCount, topics: results };
 }
 
 /** 更新选题状态 */
-export function updateTopicStatusInDb(id: string, status: "idea" | "used" | "archived"): boolean {
+export function updateTopicStatusInDb(
+  id: string,
+  status: "idea" | "used" | "archived",
+): boolean {
   const db = getDb();
-  const res = db.prepare("UPDATE topic_repository SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(status, id);
+  const res = db
+    .prepare(
+      "UPDATE topic_repository SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .run(status, id);
   return res.changes > 0;
 }
 
@@ -281,13 +398,44 @@ export function deleteTopicFromDb(id: string): boolean {
  * 4. 针对新收录笔记生成高价值平台选题，落库到 topic_repository；
  * 5. 刷新上次扫描时间戳。
  */
-export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}): Promise<{
+export type TopicMineResult = {
   ran: boolean;
   reason?: string;
   newNotesCount: number;
   savedTopicsCount: number;
   topics: TopicRepositoryItem[];
-}> {
+};
+
+/** 并发保护包装：页面懒检查 / mine 路由 / instrumentation 定时器并发调用时只跑一轮挖掘（DB 锁跨 bundle 生效） */
+export async function checkAndMineHourlyTopics(
+  options: { force?: boolean } = {},
+): Promise<TopicMineResult> {
+  const db = getDb();
+  const lockRow = db
+    .prepare("SELECT value FROM app_settings WHERE key = ?")
+    .get(SETTING_KEY_MINING_LOCK) as { value: string | null } | undefined;
+  const lockAt = lockRow?.value ? Date.parse(lockRow.value) : 0;
+  if (lockAt && Date.now() - lockAt < 10 * 60 * 1000) {
+    return {
+      ran: false,
+      reason: "已有选题挖掘任务在运行，本次跳过（并发保护）",
+      newNotesCount: 0,
+      savedTopicsCount: 0,
+      topics: [],
+    };
+  }
+  setSetting(SETTING_KEY_MINING_LOCK, new Date().toISOString());
+  try {
+    return await runMiningOnce(options);
+  } finally {
+    setSetting(SETTING_KEY_MINING_LOCK, "");
+  }
+}
+
+/** 单次挖掘实体逻辑（被外层包上并发锁后调用） */
+async function runMiningOnce(
+  options: { force?: boolean } = {},
+): Promise<TopicMineResult> {
   const db = getDb();
   const settings = getSettings();
   const lastScannedAt = settings[SETTING_KEY_LAST_SCANNED];
@@ -309,32 +457,48 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
   }
 
   // 2. 查询自上次扫描以来新收录的笔记（按创建时间升序，取最新 10 篇）
-  let newNotes: Array<{ id: string; title: string | null; content: string; created_at: string }> = [];
+  let newNotes: Array<{
+    id: string;
+    title: string | null;
+    content: string;
+    created_at: string;
+  }> = [];
   if (lastScannedAt) {
-    newNotes = db.prepare(
-      "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ? ORDER BY created_at DESC LIMIT 10"
-    ).all(lastScannedAt) as any[];
+    newNotes = db
+      .prepare(
+        "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL AND created_at > ? ORDER BY created_at DESC LIMIT 10",
+      )
+      .all(lastScannedAt) as Array<{
+      id: string;
+      title: string | null;
+      content: string;
+      created_at: string;
+    }>;
   } else {
     // 首次运行时，只取最新收录的 3 篇笔记作为试点，避免全库分析导致 Token 爆炸
-    newNotes = db.prepare(
-      "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL ORDER BY created_at DESC LIMIT 3"
-    ).all() as any[];
+    newNotes = db
+      .prepare(
+        "SELECT id, title, content, created_at FROM knowledge_items WHERE chunk_index IS NULL ORDER BY created_at DESC LIMIT 3",
+      )
+      .all() as Array<{
+      id: string;
+      title: string | null;
+      content: string;
+      created_at: string;
+    }>;
   }
 
   // 查重抑制：如果新笔记在选题库中已经存在待创作（status = 'idea'）的选题，则予以排除，防止同一篇笔记被反复生成多个选题
   const existingIdeaTopicRows = db
-    .prepare("SELECT source_note_ids FROM topic_repository WHERE status = 'idea'")
+    .prepare(
+      "SELECT source_note_ids FROM topic_repository WHERE status = 'idea'",
+    )
     .all() as { source_note_ids: string | null }[];
   const coveredNoteIds = new Set<string>();
   for (const row of existingIdeaTopicRows) {
-    try {
-      if (row.source_note_ids) {
-        const ids = JSON.parse(row.source_note_ids);
-        if (Array.isArray(ids)) {
-          for (const nid of ids) coveredNoteIds.add(nid);
-        }
-      }
-    } catch {}
+    for (const nid of parseJsonField<string[]>(row.source_note_ids, [])) {
+      coveredNoteIds.add(nid);
+    }
   }
 
   const unminedNotes = options.force
@@ -346,9 +510,10 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
     setSetting(SETTING_KEY_LAST_SCANNED, now.toISOString());
     return {
       ran: false,
-      reason: newNotes.length > 0
-        ? "新收录笔记已在选题库中拥有待创作选题，跳过重复生成（0 Token 消耗）"
-        : "该周期内没有新收录的内容，跳过选题生成（0 Token 消耗）",
+      reason:
+        newNotes.length > 0
+          ? "新收录笔记已在选题库中拥有待创作选题，跳过重复生成（0 Token 消耗）"
+          : "该周期内没有新收录的内容，跳过选题生成（0 Token 消耗）",
       newNotesCount: newNotes.length,
       savedTopicsCount: 0,
       topics: [],
@@ -358,34 +523,48 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
   // 3. 提取新笔记关联的知识卡片（若有）
   const noteIds = unminedNotes.map((n) => n.id);
   const placeholders = noteIds.map(() => "?").join(",");
-  const cardRows = db.prepare(`
+  const cardRows = db
+    .prepare(`
     SELECT c.id, c.document_id, c.content_md, ki.title AS note_title
     FROM knowledge_cards c
     JOIN knowledge_items ki ON ki.id = c.document_id
     WHERE c.document_id IN (${placeholders})
-  `).all(...noteIds) as Array<{ id: string; document_id: string; content_md: string; note_title: string | null }>;
+  `)
+    .all(...noteIds) as Array<{
+    id: string;
+    document_id: string;
+    content_md: string;
+    note_title: string | null;
+  }>;
 
   const cardMap = new Map(cardRows.map((c) => [c.document_id, c]));
 
   // 4. 获取历史已存在的选题标题，杜绝重复
-  const existingTitles = (db
-    .prepare("SELECT title FROM topic_repository ORDER BY created_at DESC LIMIT 80")
-    .all() as Array<{ title: string }>).map((r) => r.title.trim());
+  const existingTitles = (
+    db
+      .prepare(
+        "SELECT title FROM topic_repository ORDER BY created_at DESC LIMIT 80",
+      )
+      .all() as Array<{ title: string }>
+  ).map((r) => r.title.trim());
 
-  // 5. 组装输入语料
-  const noteMaterials = unminedNotes.map((n, idx) => {
-    const card = cardMap.get(n.id);
-    if (card) {
-      const f = parseCardFields(card.content_md);
-      return `【新收录资料 ${idx + 1}】《${n.title || "未命名笔记"}》 (ID: ${n.id})\n  核心主张：${f.claim || n.title}\n  边界/切口：${f.applicable || f.cut || "通用"}\n  原文提要：${n.content.slice(0, 200).replace(/\n/g, " ")}`;
-    }
-    return `【新收录资料 ${idx + 1}】《${n.title || "未命名笔记"}》 (ID: ${n.id})\n  内容提要：${n.content.slice(0, 300).replace(/\n/g, " ")}`;
-  }).join("\n\n");
+  // 5. 组装输入语料（每条语料截断控 Token，知识卡片字段也可能很长）
+  const noteMaterials = unminedNotes
+    .map((n, idx) => {
+      const title = clip(n.title, 60) || "未命名笔记";
+      const card = cardMap.get(n.id);
+      if (card) {
+        const f = parseCardFields(card.content_md);
+        return `【新收录资料 ${idx + 1}】《${title}》 (ID: ${n.id})\n  核心主张：${clip(f.claim, 300) || title}\n  边界/切口：${clip(f.applicable || f.cut, 200) || "通用"}\n  原文提要：${clip(n.content, 200)}`;
+      }
+      return `【新收录资料 ${idx + 1}】《${title}》 (ID: ${n.id})\n  内容提要：${clip(n.content, 300)}`;
+    })
+    .join("\n\n");
 
   const cfg = getByok();
   const topicAgent = getAgentForStage("topic");
 
-  let generatedRawTopics: any[] = [];
+  let generatedRawTopics: RawGeneratedTopic[] = [];
 
   if (cfg) {
     try {
@@ -395,9 +574,13 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
         apiKey: cfg.apiKey,
       });
 
-      const existingConstraint = existingTitles.length > 0
-        ? `\n【历史已存在的选题库（严禁重复或高度雷同！）】：\n${existingTitles.slice(0, 40).map((t, i) => `${i + 1}. ${t}`).join("\n")}`
-        : "";
+      const existingConstraint =
+        existingTitles.length > 0
+          ? `\n【历史已存在的选题库（严禁重复或高度雷同！）】：\n${existingTitles
+              .slice(0, 40)
+              .map((t, i) => `${i + 1}. ${t}`)
+              .join("\n")}`
+          : "";
 
       const systemPrompt =
         topicAgent?.system_prompt ||
@@ -442,7 +625,9 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
       const start = text.indexOf("[");
       const end = text.lastIndexOf("]");
       if (start !== -1 && end > start) {
-        generatedRawTopics = JSON.parse(text.slice(start, end + 1));
+        generatedRawTopics = JSON.parse(
+          text.slice(start, end + 1),
+        ) as RawGeneratedTopic[];
       }
     } catch (err) {
       console.error("[topics] hourly topic mining LLM error:", err);
@@ -472,7 +657,8 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
     if (unminedNotes.length >= 2) {
       generatedRawTopics.push({
         title: `当「${unminedNotes[0].title || "技术"}」遇到「${unminedNotes[1].title || "认知"}」：跨界融合的底层逻辑`,
-        angle: "把看似独立的两篇笔记观点进行跨领域张力碰撞，提炼出超越单一维度的洞察。",
+        angle:
+          "把看似独立的两篇笔记观点进行跨领域张力碰撞，提炼出超越单一维度的洞察。",
         hook: "创新的本质不是凭空造物，而是把不同领域的常识连接在一起，产生新的认知突破。",
         targetSkill: "wechat",
         outline: [
@@ -491,15 +677,25 @@ export async function checkAndMineHourlyTopics(options: { force?: boolean } = {}
     const title = String(raw.title || "").trim();
     if (!title) continue;
     // 双重排重检查：既不与库中历史重复，也不与本批次新生成的重复
-    if (existingTitles.includes(title) || savedTopics.some((t) => t.title === title)) {
+    if (
+      existingTitles.includes(title) ||
+      savedTopics.some((t) => t.title === title)
+    ) {
       continue;
     }
 
-    const targetSkill = (["wechat", "xiaohongshu", "zhihu", "x_thread", "master"].includes(raw.targetSkill)
-      ? raw.targetSkill
-      : "wechat") as PlatformSkillId;
+    const targetSkillRaw = String(raw.targetSkill ?? "");
+    const targetSkill = (
+      ["wechat", "xiaohongshu", "zhihu", "x_thread", "master"].includes(
+        targetSkillRaw,
+      )
+        ? targetSkillRaw
+        : "wechat"
+    ) as PlatformSkillId;
 
-    const matIdxs: number[] = Array.isArray(raw.materialIndices) ? raw.materialIndices : [1];
+    const matIdxs: number[] = Array.isArray(raw.materialIndices)
+      ? raw.materialIndices
+      : [1];
     const sourceNotes = matIdxs.map((i) => unminedNotes[i - 1]).filter(Boolean);
     const sourceNoteIds = sourceNotes.map((n) => n.id);
 
