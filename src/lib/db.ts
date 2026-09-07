@@ -314,6 +314,19 @@ function runLegacyMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_topic_repo_created ON topic_repository(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_topic_repo_title ON topic_repository(title);
     CREATE INDEX IF NOT EXISTS idx_topic_repo_status ON topic_repository(status);
+
+    -- 11. API 密钥表（MCP 与外部 Agent 鉴权调用）
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL,
+      key_value TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME,
+      status TEXT DEFAULT 'active'
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
   `);
 
   migrateFts(db);
@@ -368,8 +381,10 @@ function runLegacyMigrations(db: Database.Database): void {
  * 当前 schema 版本号。现有全部建表/种子/加列逻辑整体视为 v1。
  * v2: 解除 knowledge_cards.document_id 的 UNIQUE 约束，支持单篇笔记萃取 1~3 张原子卡片。
  * v3: 升级 topic_repository 表，支持智能选题雷达（Topic Radar）：3模式碰撞、指纹排重、3选1标题矩阵与结构化大纲。
+ * v4: 新增 api_keys 表与索引，支持 MCP 协议和外部 Agent 安全鉴权。
+ * v5: 为 api_keys 增加 key_value 列，支持创作者随时在设置中复制完整密钥。
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 5;
 
 function migrate(db: Database.Database): void {
   const current = Number(db.pragma("user_version", { simple: true }) || 0);
@@ -391,6 +406,48 @@ function migrate(db: Database.Database): void {
       db.pragma("user_version = 3");
     })();
   }
+  if (current < 4) {
+    db.transaction(() => {
+      migrateApiKeysSupport(db);
+      db.pragma("user_version = 4");
+    })();
+  }
+  if (current < 5) {
+    db.transaction(() => {
+      ensureColumn(
+        db,
+        "api_keys",
+        "key_value",
+        "ALTER TABLE api_keys ADD COLUMN key_value TEXT",
+      );
+      db.pragma("user_version = 5");
+    })();
+  }
+}
+
+/**
+ * v4 迁移：新增 api_keys 表与索引
+ */
+function migrateApiKeysSupport(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL,
+      key_value TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME,
+      status TEXT DEFAULT 'active'
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+  `);
+  ensureColumn(
+    db,
+    "api_keys",
+    "key_value",
+    "ALTER TABLE api_keys ADD COLUMN key_value TEXT",
+  );
 }
 
 /**

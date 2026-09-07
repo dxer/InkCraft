@@ -1,14 +1,19 @@
 "use client";
 
 import {
+  AlertCircle,
+  Bot,
   Boxes,
   Check,
   CheckCircle2,
   Copy,
+  Cpu,
   Database,
   DatabaseBackup,
   Download,
+  ExternalLink,
   FileDown,
+  Globe,
   Image as ImageIcon,
   KeyRound,
   Loader2,
@@ -19,7 +24,9 @@ import {
   Radio,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Sparkles,
+  Terminal,
   Trash2,
   Volume2,
   XCircle,
@@ -54,11 +61,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { VoiceProfile } from "@/app/api/voices/route";
 
-type TabId = "models" | "voices" | "extension" | "export";
+type TabId = "models" | "voices" | "mcp" | "extension" | "export";
 
 const TABS: { id: TabId; label: string; icon: typeof KeyRound }[] = [
   { id: "models", label: "模型设置", icon: KeyRound },
   { id: "voices", label: "文风语调档案", icon: Volume2 },
+  { id: "mcp", label: "MCP 与 API 密钥", icon: Bot },
   { id: "extension", label: "采集接口", icon: Puzzle },
   { id: "export", label: "数据导出与备份", icon: DatabaseBackup },
 ];
@@ -197,6 +205,7 @@ export default function SettingsPage() {
 
       {tab === "models" && <ModelsTab />}
       {tab === "voices" && <VoicesTab />}
+      {tab === "mcp" && <McpTab />}
       {tab === "extension" && <ExtensionTab />}
       {tab === "export" && <ExportTab />}
     </div>
@@ -1376,25 +1385,45 @@ function NewVoiceDialog({
   onCreated: () => void;
 }) {
   const [name, setName] = useState("");
-  const [sample1, setSample1] = useState("");
-  const [sample2, setSample2] = useState("");
+  const [samples, setSamples] = useState<string[]>(["", ""]);
   const [saving, setSaving] = useState(false);
 
+  // 打开弹窗或关闭时重置
+  useEffect(() => {
+    if (!open) {
+      setName("");
+      setSamples(["", ""]);
+    }
+  }, [open]);
+
+  function updateSample(index: number, value: string) {
+    setSamples((prev) => prev.map((s, i) => (i === index ? value : s)));
+  }
+
+  function addSample() {
+    if (samples.length >= 6) return;
+    setSamples((prev) => [...prev, ""]);
+  }
+
+  function removeSample(index: number) {
+    if (samples.length <= 1) return;
+    setSamples((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleCreate() {
-    const samples = [sample1.trim(), sample2.trim()].filter(Boolean);
-    if (!name.trim() || samples.length === 0) return;
+    const validSamples = samples.map((s) => s.trim()).filter(Boolean);
+    if (!name.trim() || validSamples.length === 0) return;
 
     setSaving(true);
     try {
       const res = await fetch("/api/voices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), samples }),
+        body: JSON.stringify({ name: name.trim(), samples: validSamples }),
       });
       if (res.ok) {
         setName("");
-        setSample1("");
-        setSample2("");
+        setSamples(["", ""]);
         onCreated();
       }
     } finally {
@@ -1402,20 +1431,23 @@ function NewVoiceDialog({
     }
   }
 
+  const hasAtLeastOneSample = samples.some((s) => s.trim().length > 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl rounded-xl p-5">
+      <DialogContent className="sm:max-w-xl rounded-xl p-5 max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base font-semibold">
             <Sparkles className="size-4 text-primary" />
             克隆个人文风语调
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            输入语调名称并粘贴 1~3
+            输入语调名称并粘贴 1~5
             篇你过往撰写的样稿正文，系统将自动抽取你的行文节奏与修辞约束。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+
+        <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
           <div className="space-y-1.5">
             <Label className="text-xs">语调名称</Label>
             <Input
@@ -1425,39 +1457,72 @@ function NewVoiceDialog({
               className="text-xs rounded-md"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">历史代表作样稿 1</Label>
-            <Textarea
-              value={sample1}
-              onChange={(e) => setSample1(e.target.value)}
-              placeholder="粘贴一篇你满意的历史文章全文或长片段..."
-              className="min-h-24 text-xs font-mono rounded-md"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">历史代表作样稿 2（可选）</Label>
-            <Textarea
-              value={sample2}
-              onChange={(e) => setSample2(e.target.value)}
-              placeholder="粘贴另一篇样稿以提高抽取准确度..."
-              className="min-h-24 text-xs font-mono rounded-md"
-            />
+
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">历史代表作样稿列表 ({samples.length})</Label>
+              <span className="text-[11px] text-muted-foreground">可粘贴多篇代表作以提升抽取精度</span>
+            </div>
+
+            {samples.map((sample, idx) => (
+              <div
+                key={idx}
+                className="space-y-1.5 rounded-lg border bg-muted/20 p-3 relative group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-foreground">
+                    样稿 {idx + 1} {idx === 0 ? "（主要样本）" : `（辅助样本 ${idx}）`}
+                  </span>
+                  {samples.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeSample(idx)}
+                      className="text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
+                      title="移除此样稿"
+                    >
+                      <Trash2 className="size-3" />
+                      <span>移除</span>
+                    </button>
+                  )}
+                </div>
+                <Textarea
+                  value={sample}
+                  onChange={(e) => updateSample(idx, e.target.value)}
+                  placeholder={`粘贴第 ${idx + 1} 篇历史文章全文或长片段...`}
+                  className="min-h-24 text-xs font-mono rounded-md bg-background"
+                />
+              </div>
+            ))}
+
+            {samples.length < 6 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSample}
+                className="w-full h-9 border-dashed text-xs text-muted-foreground hover:text-primary hover:border-primary/50 gap-1.5 cursor-pointer rounded-lg"
+              >
+                <Plus className="size-3.5" />
+                <span>添加一篇新样稿（目前 {samples.length}/6 篇）</span>
+              </Button>
+            )}
           </div>
         </div>
+
         <DialogFooter className="border-t pt-4">
           <Button
             variant="outline"
             size="sm"
             onClick={() => onOpenChange(false)}
-            className="rounded-md"
+            className="rounded-md cursor-pointer"
           >
             取消
           </Button>
           <Button
             size="sm"
-            className="rounded-md font-semibold"
+            className="rounded-md font-semibold cursor-pointer"
             onClick={handleCreate}
-            disabled={saving || !name.trim() || !sample1.trim()}
+            disabled={saving || !name.trim() || !hasAtLeastOneSample}
           >
             {saving ? (
               <>
@@ -1737,3 +1802,533 @@ function ExportTab() {
     </Card>
   );
 }
+
+/* ============ 标签页五：MCP 与 API 密钥管理 ============ */
+
+interface ApiKeyViewItem {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  keyValue: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  status: "active" | "revoked";
+}
+
+function McpTab() {
+  const [keys, setKeys] = useState<ApiKeyViewItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newKeyDialogOpen, setNewKeyDialogOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  // 记录每个 Key 是否展示完整明文
+  const [showPlainKey, setShowPlainKey] = useState<Record<string, boolean>>({});
+  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+
+  // 单次完整展示密钥的弹窗
+  const [revealedSecretKey, setRevealedSecretKey] = useState<{
+    name: string;
+    rawKey: string;
+  } | null>(null);
+
+  const [copiedModalKey, setCopiedModalKey] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [clientTab, setClientTab] = useState<"claude" | "cursor" | "dify" | "curl">("claude");
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    fetchKeys();
+  }, []);
+
+  async function fetchKeys() {
+    try {
+      const res = await fetch("/api/settings/api-keys");
+      if (res.ok) {
+        const data = await res.json();
+        setKeys(data.keys || []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreateKey() {
+    if (!newKeyName.trim()) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/settings/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newKeyName.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNewKeyDialogOpen(false);
+        setNewKeyName("");
+        if (data.key?.rawKey) {
+          setRevealedSecretKey({
+            name: data.key.name,
+            rawKey: data.key.rawKey,
+          });
+        }
+        await fetchKeys();
+      }
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteKey(id: string) {
+    const res = await fetch(`/api/settings/api-keys/${id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setKeys((prev) => prev.filter((k) => k.id !== id));
+    }
+  }
+
+  function copyText(text: string, type: "modal_key" | "url" | string) {
+    navigator.clipboard.writeText(text);
+    if (type === "modal_key") {
+      setCopiedModalKey(true);
+      setTimeout(() => setCopiedModalKey(false), 2000);
+    } else if (type === "url") {
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    } else {
+      setCopiedSnippet(type);
+      setTimeout(() => setCopiedSnippet(null), 2000);
+    }
+  }
+
+  function copyKeyFromList(keyItem: ApiKeyViewItem) {
+    navigator.clipboard.writeText(keyItem.keyValue || keyItem.keyPrefix);
+    setCopiedKeyId(keyItem.id);
+    setTimeout(() => setCopiedKeyId(null), 2000);
+  }
+
+  const endpointUrl = `${origin || "http://localhost:3000"}/mcp`;
+
+  const claudeConfigSnippet = JSON.stringify(
+    {
+      mcpServers: {
+        inkcraft: {
+          url: endpointUrl,
+          headers: {
+            Authorization: `Bearer ${keys[0]?.keyValue || "YOUR_API_KEY"}`,
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const cursorConfigSnippet = JSON.stringify(
+    {
+      name: "inkcraft",
+      type: "sse",
+      url: endpointUrl,
+      headers: {
+        Authorization: `Bearer ${keys[0]?.keyValue || "YOUR_API_KEY"}`,
+      },
+    },
+    null,
+    2,
+  );
+
+  const curlSnippet = `curl -X POST ${endpointUrl} \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${keys[0]?.keyValue || "YOUR_API_KEY"}" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "tools/call",
+    "params": {
+      "name": "search_cards_by_query",
+      "arguments": {
+        "query": "注意力残留与认知负荷",
+        "limit": 5
+      }
+    }
+  }'`;
+
+  return (
+    <div className="space-y-6">
+      {/* 密钥管理 */}
+      <Card className="rounded-xl border bg-card shadow-xs">
+        <CardHeader className="p-6 pb-4 flex flex-row items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <CardTitle className="text-base font-semibold">
+                API 密钥管理
+              </CardTitle>
+            </div>
+            <CardDescription className="text-xs text-muted-foreground mt-1">
+              创建安全的 API 密钥供外部 Agent 通过 MCP 协议只读访问你的知识库。密钥随时可在此复制使用。
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setNewKeyDialogOpen(true)}
+            className="h-8 gap-1.5 text-xs rounded-md font-semibold cursor-pointer"
+          >
+            <Plus className="size-3.5" />
+            <span>新建密钥</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-6 pt-0 space-y-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="size-5 animate-spin mr-2" />
+              <span className="text-xs">加载密钥列表中...</span>
+            </div>
+          ) : keys.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 px-4 text-center space-y-2 bg-muted/20">
+              <KeyRound className="size-7 text-muted-foreground/40" />
+              <p className="text-xs font-medium text-foreground">暂无 API 密钥</p>
+              <p className="text-[11px] text-muted-foreground max-w-sm">
+                点击右上角「新建密钥」，为 Claude Desktop、Cursor 或自定义 Agent 生成专属凭证。
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y rounded-lg border bg-muted/20">
+              {keys.map((k) => {
+                const isPlain = !!showPlainKey[k.id];
+                const displayKey = isPlain ? k.keyValue : k.keyPrefix;
+                const isCopied = copiedKeyId === k.id;
+
+                return (
+                  <div
+                    key={k.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 text-xs gap-3 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-foreground">{k.name}</span>
+                        <div className="flex items-center gap-1">
+                          <code className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground/90 border font-medium">
+                            {displayKey}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowPlainKey((prev) => ({
+                                ...prev,
+                                [k.id]: !prev[k.id],
+                              }))
+                            }
+                            className="text-[10px] text-muted-foreground hover:text-foreground px-1 py-0.5 rounded cursor-pointer transition-colors"
+                            title={isPlain ? "隐藏完整密钥" : "显示完整密钥"}
+                          >
+                            {isPlain ? "隐藏" : "查看"}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-mono">
+                        <span>创建于: {new Date(k.createdAt).toLocaleDateString("zh-CN")}</span>
+                        <span>•</span>
+                        <span>
+                          最后调用: {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("zh-CN") : "从未调用"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyKeyFromList(k)}
+                        className="h-7 px-2.5 text-xs gap-1 rounded-md font-medium cursor-pointer"
+                        title="复制完整密钥"
+                      >
+                        {isCopied ? (
+                          <Check className="size-3 text-emerald-600" />
+                        ) : (
+                          <Copy className="size-3" />
+                        )}
+                        <span>{isCopied ? "已复制" : "复制密钥"}</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteKey(k.id)}
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                        title="删除并吊销此密钥"
+                      >
+                        <Trash2 className="size-3.5 mr-1" />
+                        <span>删除</span>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* MCP 协议接入指引 */}
+      <Card className="rounded-xl border bg-card shadow-xs">
+        <CardHeader className="p-6 pb-4">
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-primary" />
+            <CardTitle className="text-base font-semibold">
+              MCP 双模服务接口 (Model Context Protocol)
+            </CardTitle>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            统一通过 <code className="rounded bg-muted px-1 font-mono text-primary font-semibold">/mcp</code> 端点接入。支持标准 SSE 长连接握手与无状态 Direct JSON-RPC 2.0 请求。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 pt-0 space-y-5">
+          {/* 统一服务 URL */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">统一 MCP 服务端点 URL</Label>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={endpointUrl}
+                className="font-mono text-xs rounded-md bg-muted/40 font-semibold"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 shrink-0 text-xs rounded-md cursor-pointer"
+                onClick={() => copyText(endpointUrl, "url")}
+              >
+                {copiedUrl ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copiedUrl ? "已复制" : "复制"}
+              </Button>
+            </div>
+          </div>
+
+          {/* 客户端接入配置快速复制 */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">客户端接入配置代码</Label>
+              <div className="flex gap-1 bg-muted/40 p-0.5 rounded-md border text-[11px]">
+                {(
+                  [
+                    { id: "claude", label: "Claude Desktop" },
+                    { id: "cursor", label: "Cursor" },
+                    { id: "curl", label: "cURL / 脚本" },
+                  ] as const
+                ).map((tabItem) => (
+                  <button
+                    key={tabItem.id}
+                    onClick={() => setClientTab(tabItem.id)}
+                    className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-all ${
+                      clientTab === tabItem.id
+                        ? "bg-background text-foreground shadow-2xs font-semibold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tabItem.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative rounded-lg border bg-zinc-950 p-3.5 font-mono text-[11px] text-zinc-200">
+              <pre className="overflow-x-auto whitespace-pre leading-relaxed">
+                {clientTab === "claude" && claudeConfigSnippet}
+                {clientTab === "cursor" && cursorConfigSnippet}
+                {clientTab === "curl" && curlSnippet}
+              </pre>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  copyText(
+                    clientTab === "claude"
+                      ? claudeConfigSnippet
+                      : clientTab === "cursor"
+                        ? cursorConfigSnippet
+                        : curlSnippet,
+                    clientTab,
+                  )
+                }
+                className="absolute top-2.5 right-2.5 h-6 px-2 text-[10px] gap-1 rounded bg-zinc-800 text-zinc-200 hover:bg-zinc-700 cursor-pointer"
+              >
+                {copiedSnippet === clientTab ? (
+                  <Check className="size-3 text-emerald-400" />
+                ) : (
+                  <Copy className="size-3" />
+                )}
+                {copiedSnippet === clientTab ? "已复制" : "复制代码"}
+              </Button>
+            </div>
+          </div>
+
+          {/* 暴露的只读能力清单 */}
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-xs font-semibold">已暴露的 4 大只读 Tools 规范</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="rounded-lg border p-3 bg-muted/20 space-y-1">
+                <div className="flex items-center gap-1.5 font-mono font-semibold text-xs text-primary">
+                  <Terminal className="size-3" />
+                  <span>search_cards_by_query</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  基于自然语言 Query 多维度加权打分，返回高匹配断言卡片、相关度分值及命中原因。
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-3 bg-muted/20 space-y-1">
+                <div className="flex items-center gap-1.5 font-mono font-semibold text-xs text-primary">
+                  <Terminal className="size-3" />
+                  <span>get_card_detail</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  传入 card_id，获取完整 Markdown 正文、Frontmatter 与所属笔记。
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-3 bg-muted/20 space-y-1">
+                <div className="flex items-center gap-1.5 font-mono font-semibold text-xs text-primary">
+                  <Terminal className="size-3" />
+                  <span>list_topics</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  读取选题雷达库，返回 3 选 1 标题矩阵、核心论证切角与绑定的卡片引用。
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-3 bg-muted/20 space-y-1">
+                <div className="flex items-center gap-1.5 font-mono font-semibold text-xs text-primary">
+                  <Terminal className="size-3" />
+                  <span>list_recent_works</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  读取近期已成稿作品及正文摘要，供 Agent 学习并对齐创作者文风。
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 新建密钥弹窗 */}
+      <Dialog open={newKeyDialogOpen} onOpenChange={setNewKeyDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-xl p-5">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+              <ShieldCheck className="size-4 text-primary" />
+              创建新 API 密钥
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              为密钥命名以标识调用方（如：Cursor 插件、Claude Desktop 或自动化流水线）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">密钥名称 / 用途备注</Label>
+              <Input
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="例如：Claude Desktop 接入密钥"
+                className="text-xs rounded-md"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newKeyName.trim() && !creating) {
+                    handleCreateKey();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="border-t pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNewKeyDialogOpen(false)}
+              className="rounded-md cursor-pointer"
+            >
+              取消
+            </Button>
+            <Button
+              size="sm"
+              className="rounded-md font-semibold cursor-pointer"
+              onClick={handleCreateKey}
+              disabled={creating || !newKeyName.trim()}
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin mr-1" />
+                  生成中...
+                </>
+              ) : (
+                "确认生成"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 密钥生成后的展示弹窗 */}
+      <Dialog
+        open={!!revealedSecretKey}
+        onOpenChange={(open) => !open && setRevealedSecretKey(null)}
+      >
+        <DialogContent className="sm:max-w-lg rounded-xl p-5 space-y-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="size-5" />
+              API 密钥创建成功
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              密钥已成功生成并保存在列表中，你可以立即复制，也可以随时在列表中查看与复制。
+            </DialogDescription>
+          </DialogHeader>
+
+          {revealedSecretKey && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">密钥名称：{revealedSecretKey.name}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={revealedSecretKey.rawKey}
+                    className="font-mono text-xs rounded-md bg-muted/60 break-all font-semibold select-all"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-9 gap-1.5 shrink-0 text-xs rounded-md font-semibold cursor-pointer"
+                    onClick={() => copyText(revealedSecretKey.rawKey, "modal_key")}
+                  >
+                    {copiedModalKey ? (
+                      <Check className="size-3.5 text-emerald-300" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    {copiedModalKey ? "已复制" : "复制密钥"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-3">
+            <Button
+              size="sm"
+              className="rounded-md font-semibold w-full cursor-pointer"
+              onClick={() => setRevealedSecretKey(null)}
+            >
+              完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
