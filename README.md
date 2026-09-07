@@ -216,10 +216,14 @@ pnpm dev
 
 ### Docker 单容器部署（基于 Alpine 轻量镜像）
 
-墨匠容器基于 **`node:22-alpine`** 构建，集成多阶段编译、C++ 原生模块编译、最小非 root 用户权限与内置健康检查探针：
+墨匠容器基于 **`node:22-alpine`** 构建，集成多阶段编译、C++ 原生模块编译、最小非 root 用户权限与内置健康检查探针。
+
+项目内置 **GitHub Actions 自动化流水线 (`.github/workflows/docker-publish.yml`)**，每次向 `main` 分支提交或发布 Release Tag 时，会自动跨平台编译 `linux/amd64` 和 `linux/arm64` 镜像并推送到 **GitHub Container Registry (GHCR)**。
+
+#### 方式 1：使用 docker-compose 本地构建或拉取运行（推荐）
 
 ```bash
-# 1. 启动服务（自动构建并挂载持久化 SQLite 数据卷）
+# 1. 启动服务（自动构建/拉取并挂载持久化 SQLite 数据卷）
 docker compose up -d
 
 # 2. 查看容器运行状态与健康检查
@@ -240,12 +244,26 @@ docker compose logs -f
 > **💡 大模型配置说明**：
 > 墨匠遵循 **BYOK（自带密钥）** 理念，大模型不在环境变量或静态配置文件中配置，而是登录后在 **「系统设置」(`/settings`)** 面板中可视化集中管理。支持接入任意兼容 OpenAI 协议的提供商（DeepSeek、OpenAI、SiliconFlow、Ollama 等），并为文本生成、多模态生图与嵌入检索独立分配通道，热修改即时生效。
 
-> **手动 Docker CLI 构建与运行：**
+#### 方式 2：直接拉取 GitHub 自动编译的 GHCR 预构建镜像运行
+
+```bash
+# 拉取由 GitHub Actions 自动构建的最新多架构镜像（替换为你的 GitHub 仓库路径）
+docker run -d \
+  --name inkcraft \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e TZ=Asia/Shanghai \
+  -e ACCESS_PASSWORD=your_secure_password \
+  ghcr.io/hfling/inkcraft:latest
+```
+
+> **方式 3：本地手动 Docker CLI 构建：**
 > ```bash
 > # 单独构建 Alpine 镜像
 > docker build -t inkcraft:latest .
 > 
-> # 运行容器并挂载宿主机目录
+> # 运行本地镜像
 > docker run -d \
 >   --name inkcraft \
 >   --restart unless-stopped \
