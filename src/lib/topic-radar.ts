@@ -5,10 +5,17 @@ import { parseCardFields } from "./card-md";
 import { getAllCards } from "./cards";
 import { getDb } from "./db";
 import { getAgentForStage } from "./pipeline";
-import { getByok } from "./settings";
+import { getByok, setSetting } from "./settings";
 import {
+  getTopicMiningState,
   saveTopicToRepository,
+  SETTING_KEY_LAST_SCANNED,
+  SETTING_KEY_MINING_LAST_RESULT,
+  SETTING_KEY_MINING_LOCK,
+  SETTING_KEY_MINING_STARTED_AT,
+  SETTING_KEY_MINING_STATUS,
   type TopicMineResult,
+  type TopicMiningState,
 } from "./topics";
 import {
   type PlatformSkillId,
@@ -38,12 +45,11 @@ export interface CardCollisionPair {
   reason: string;
 }
 
-/** 大模型返回的结构化选题 JSON 格式定义 */
+/** 大模型返回的结构化选题 JSON 格式定义（通用母稿创作方案） */
 export interface RadarGeneratedOutput {
   topic_name: string;
   angle_type: TopicRadarAngleType;
   target_audience: string;
-  recommended_platform: "xiaohongshu" | "wechat" | "twitter" | "zhihu" | "master";
   core_argument: string;
   title_options: string[];
   outline: Array<{
@@ -55,7 +61,7 @@ export interface RadarGeneratedOutput {
 
 /** 计算卡片碰撞的 MD5 物理去重指纹：按卡片 ID 排序后拼接 */
 export function computeCollisionFingerprint(cardIds: string[]): string {
-  const sorted = [...cardIds].map((id) => id.trim()).sort();
+  const sorted = [...cardIds].map((id) => String(id || "").trim()).sort();
   return createHash("md5").update(sorted.join("_")).digest("hex");
 }
 
@@ -122,12 +128,138 @@ export function loadAllRadarCandidates(): RadarCardCandidate[] {
   return candidates;
 }
 
+/** 知识簇定义（同一父笔记的卡片聚合 + 黄金互补旧卡） */
+export interface CardCluster {
+  docId: string;
+  noteTitle: string;
+  tag: string;
+  cards: RadarCardCandidate[];
+  complementaryCards: RadarCardCandidate[];
+  branch: "single_point" | "topic_deepening" | "topic_network";
+  angleType: TopicRadarAngleType;
+  reason: string;
+  fingerprint: string;
+}
+
 /**
- * 挖掘可碰撞的候选卡片组合（三种模式）：
- * 1. 反差碰撞（Paradox）：相似度 0.15 ~ 0.45（关键词张力区间），或包含机制与边界对立
- * 2. 跨界同构（Intersection）：来自不同主标签（tagA !== tagB），底层机制有交叉
- * 3. 专题纵深（Deep Dive）：来自相同主标签，逻辑前后承接
+ * 构建知识簇并按三路生命周期路由（单点打透、同题深化、专题成网）
  */
+export function buildCardClusters(
+  candidates: RadarCardCandidate[],
+  options: {
+    preferredAngle?: TopicRadarAngleType | "all";
+    limit?: number;
+    excludeFingerprints?: Set<string>;
+  } = {},
+): CardCluster[] {
+  const { preferredAngle = "all", limit = 3, excludeFingerprints = new Set() } = options;
+  if (candidates.length === 0) return [];
+
+  // 按父笔记 docId 聚合卡片为知识簇
+  const docMap = new Map<string, RadarCardCandidate[]>();
+  for (const c of candidates) {
+    const list = docMap.get(c.docId) || [];
+    list.push(c);
+    docMap.set(c.docId, list);
+  }
+
+  // 按领域主标签归类卡片
+  const tagCardMap = new Map<string, RadarCardCandidate[]>();
+  for (const c of candidates) {
+    const mainTag = c.tags[0] || "通用";
+    const list = tagCardMap.get(mainTag) || [];
+    list.push(c);
+    tagCardMap.set(mainTag, list);
+  }
+
+  const clusters: CardCluster[] = [];
+
+  for (const [docId, clusterCards] of docMap.entries()) {
+    const noteTitle = clusterCards[0]?.noteTitle || "关联笔记";
+    const mainTag = clusterCards[0]?.tags[0] || "通用";
+    const otherCardsInSameTag = (tagCardMap.get(mainTag) || []).filter(
+      (c) => c.docId !== docId,
+    );
+
+    // 软筛选：在同标签旧卡中寻找黄金相似度甜点区 (0.50 ~ 0.86)
+    const complementary: Array<{ card: RadarCardCandidate; sim: number }> = [];
+    for (const oldCard of otherCardsInSameTag) {
+      let maxSim = 0;
+      for (const cc of clusterCards) {
+        const sim = computeCardJaccardSimilarity(cc, oldCard);
+        if (sim > maxSim) maxSim = sim;
+      }
+
+      // 黄金相似度甜点区：排除同义反复(>0.88)与缺乏关联(<0.50)
+      if (maxSim >= 0.50 && maxSim <= 0.86) {
+        complementary.push({ card: oldCard, sim: maxSim });
+      }
+    }
+
+    complementary.sort((a, b) => b.sim - a.sim);
+    const topComplementary = complementary.slice(0, 2).map((item) => item.card);
+
+    // 三路分支判定
+    const totalInTag = (tagCardMap.get(mainTag) || []).length;
+    let branch: CardCluster["branch"] = "single_point";
+    let angleType: TopicRadarAngleType = "paradox";
+    let reason = "";
+
+    if (totalInTag >= 5 && otherCardsInSameTag.length >= 4) {
+      // 分支 C：专题成网
+      branch = "topic_network";
+      angleType = "deep_dive";
+      reason = `专题全景方法论：#${mainTag} 积累达 ${totalInTag} 张卡片`;
+    } else if (clusterCards.length >= 2 || topComplementary.length > 0) {
+      // 分支 B：同题深化 / 知识簇贯通
+      branch = "topic_deepening";
+      angleType =
+        preferredAngle !== "all"
+          ? preferredAngle
+          : clusterCards.length >= 2
+            ? "deep_dive"
+            : "paradox";
+      reason =
+        clusterCards.length >= 2
+          ? `知识簇内部贯通（${clusterCards.length} 张原子卡片成体系）`
+          : `同题新旧碰撞（召回《${topComplementary[0]?.noteTitle}》互补视角）`;
+    } else {
+      // 分支 A：单点打透（冷启动）
+      branch = "single_point";
+      angleType = preferredAngle !== "all" ? preferredAngle : "paradox";
+      reason = `单点认知穿透：深度剖析《${noteTitle}》核心 Hook 与机制`;
+    }
+
+    const allCardIds = [
+      ...clusterCards.map((c) => c.id),
+      ...topComplementary.map((c) => c.id),
+    ];
+    const fingerprint = computeCollisionFingerprint(allCardIds);
+
+    if (excludeFingerprints.has(fingerprint)) continue;
+
+    clusters.push({
+      docId,
+      noteTitle,
+      tag: mainTag,
+      cards: clusterCards,
+      complementaryCards: topComplementary,
+      branch,
+      angleType,
+      reason,
+      fingerprint,
+    });
+  }
+
+  // 若根据偏好策略筛选，优先排在前列
+  if (preferredAngle !== "all") {
+    clusters.sort((a, b) => (a.angleType === preferredAngle ? -1 : 1));
+  }
+
+  return clusters.slice(0, limit);
+}
+
+/** 保持向后兼容的 pair 查找器 */
 export function findCollisionPairs(
   candidates: RadarCardCandidate[],
   options: {
@@ -136,77 +268,14 @@ export function findCollisionPairs(
     excludeFingerprints?: Set<string>;
   } = {},
 ): CardCollisionPair[] {
-  const { preferredAngle = "all", limit = 6, excludeFingerprints = new Set() } = options;
-  const pairs: CardCollisionPair[] = [];
-
-  if (candidates.length < 2) return pairs;
-
-  const n = candidates.length;
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const c1 = candidates[i];
-      const c2 = candidates[j];
-      const fingerprint = computeCollisionFingerprint([c1.id, c2.id]);
-
-      if (excludeFingerprints.has(fingerprint)) continue;
-
-      const sim = computeCardJaccardSimilarity(c1, c2);
-      const tag1 = c1.tags[0] || "通用";
-      const tag2 = c2.tags[0] || "通用";
-      const hasSharedTag = tag1 === tag2 && tag1 !== "通用";
-
-      // 1. 模式 1：反差碰撞（Paradox Mode）
-      if (
-        (preferredAngle === "all" || preferredAngle === "paradox") &&
-        ((sim >= 0.12 && sim <= 0.45) ||
-          (c1.boundary && c2.mechanism && sim >= 0.08))
-      ) {
-        pairs.push({
-          cards: [c1, c2],
-          angleType: "paradox",
-          fingerprint,
-          similarityScore: sim,
-          reason: `认知张力碰撞：${c1.title} ↔ ${c2.title}`,
-        });
-      }
-
-      // 2. 模式 2：跨界同构（Intersection Mode）
-      if (
-        (preferredAngle === "all" || preferredAngle === "intersection") &&
-        !hasSharedTag &&
-        (sim >= 0.06 || (c1.tags.length > 0 && c2.tags.length > 0))
-      ) {
-        pairs.push({
-          cards: [c1, c2],
-          angleType: "intersection",
-          fingerprint,
-          similarityScore: sim,
-          reason: `跨领域隐喻映射：#${tag1} ➔ #${tag2}`,
-        });
-      }
-
-      // 3. 模式 3：专题纵深（Deep Dive Mode）
-      if (
-        (preferredAngle === "all" || preferredAngle === "deep_dive") &&
-        hasSharedTag &&
-        sim <= 0.75
-      ) {
-        pairs.push({
-          cards: [c1, c2],
-          angleType: "deep_dive",
-          fingerprint,
-          similarityScore: sim,
-          reason: `体系化干货串联：#${tag1} 专题深入`,
-        });
-      }
-    }
-  }
-
-  // 排序打乱并去重取前 N 个
-  return pairs
-    .sort((a, b) => b.similarityScore - a.similarityScore)
-    .slice(0, limit);
+  const clusters = buildCardClusters(candidates, options);
+  return clusters.map((c) => ({
+    cards: [...c.cards, ...c.complementaryCards],
+    angleType: c.angleType,
+    fingerprint: c.fingerprint,
+    similarityScore: 0.8,
+    reason: c.reason,
+  }));
 }
 
 /** 查询最近 30 天内已碰撞过的指纹集合 */
@@ -221,16 +290,155 @@ export function getRecentCollisionFingerprints(days = 30): Set<string> {
   return new Set(rows.map((r) => r.fingerprint));
 }
 
-/** 顶级内容总监 System Prompt */
-export const TOPIC_RADAR_SYSTEM_PROMPT = `你是一名顶级的全网自媒体内容总监兼爆款操盘手，精通微信公众号（深度叙事/认知重塑）、小红书（痛点直击/反常识吸睛）与知乎/即刻/X（高信息密度/锋利金句）的传播逻辑。
+function normalizeRadarOutput(
+  parsed: any,
+  pair: CardCollisionPair,
+): RadarGeneratedOutput | null {
+  if (!parsed || typeof parsed !== "object") return null;
 
-你的任务是：深度剖析系统提供的 2 到 4 张原子知识卡片，挖掘它们之间的底层机制联系、认知冲突或跨界映射，策划出 1 个极具传播爆发力的自媒体成文方案。
+  // 情况 1: 标准 RadarGeneratedOutput 格式
+  if (parsed.topic_name || parsed.title_options || parsed.core_argument) {
+    const titleOptions = Array.isArray(parsed.title_options)
+      ? parsed.title_options.map(String).filter(Boolean)
+      : [];
+    const topicName = String(parsed.topic_name || titleOptions[0] || "").trim();
+    if (topicName || titleOptions.length > 0) {
+      return {
+        topic_name: topicName || titleOptions[0] || "选题灵感方案",
+        angle_type: parsed.angle_type || pair.angleType,
+        target_audience: String(parsed.target_audience || "关注该领域的深度创作者与读者"),
+        core_argument: String(parsed.core_argument || parsed.angle || "").trim(),
+        title_options: titleOptions.length > 0 ? titleOptions : [topicName],
+        outline: Array.isArray(parsed.outline) ? parsed.outline : [],
+      };
+    }
+  }
+
+  // 情况 2: 工位 agents / 旧格式返回的 angles 数组格式 { angles: [ { proposition, core_thesis, outline, ... } ] }
+  if (Array.isArray(parsed.angles) && parsed.angles.length > 0) {
+    const firstAngle = parsed.angles[0];
+    const proposition = String(firstAngle.proposition || firstAngle.title || "").trim();
+    const coreThesis = String(firstAngle.core_thesis || firstAngle.argument || firstAngle.angle || "").trim();
+    const titles = parsed.angles
+      .map((a: any) => String(a.proposition || a.title || "").trim())
+      .filter(Boolean);
+
+    return {
+      topic_name: proposition || "选题洞察方案",
+      angle_type: pair.angleType,
+      target_audience: "关注该领域的深度创作者与读者",
+      core_argument: coreThesis,
+      title_options: titles.length > 0 ? titles : [proposition],
+      outline: Array.isArray(firstAngle.outline) ? firstAngle.outline : [],
+    };
+  }
+
+  // 情况 3: 直接返回包含 title 或 proposition 的单对象
+  if (parsed.title || parsed.proposition) {
+    const title = String(parsed.title || parsed.proposition || "").trim();
+    return {
+      topic_name: title,
+      angle_type: pair.angleType,
+      target_audience: "关注该领域的深度创作者与读者",
+      core_argument: String(parsed.angle || parsed.core_thesis || parsed.argument || "").trim(),
+      title_options: [title],
+      outline: Array.isArray(parsed.outline) ? parsed.outline : [],
+    };
+  }
+
+  return null;
+}
+
+function extractJsonFromLlmText(
+  rawText: string,
+  pair: CardCollisionPair,
+): RadarGeneratedOutput | null {
+  if (!rawText) return null;
+
+  // 1. 过滤掉 <think>...</think> 思考链内容
+  const text = rawText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  if (!text) return null;
+
+  // 2. 尝试提取 ```json ... ``` 代码块
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(text)) !== null) {
+    const code = match[1].trim();
+    try {
+      const p = JSON.parse(code);
+      const res = normalizeRadarOutput(p, pair);
+      if (res) return res;
+    } catch {
+      const sanitized = code.replace(/,\s*([\]}])/g, "$1");
+      try {
+        const p = JSON.parse(sanitized);
+        const res = normalizeRadarOutput(p, pair);
+        if (res) return res;
+      } catch {}
+    }
+  }
+
+  // 3. 寻找最外层匹配的 { ... } (利用大括号平衡深度)
+  const startIdx = text.indexOf("{");
+  if (startIdx !== -1) {
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = startIdx; i < text.length; i++) {
+      const char = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === "\\") {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === "{") depth++;
+        else if (char === "}") {
+          depth--;
+          if (depth === 0) {
+            const candidate = text.slice(startIdx, i + 1);
+            try {
+              const p = JSON.parse(candidate);
+              const res = normalizeRadarOutput(p, pair);
+              if (res) return res;
+            } catch {
+              const sanitized = candidate.replace(/,\s*([\]}])/g, "$1");
+              try {
+                const p = JSON.parse(sanitized);
+                const res = normalizeRadarOutput(p, pair);
+                if (res) return res;
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 4. 兜底直接解析
+  try {
+    const p = JSON.parse(text);
+    return normalizeRadarOutput(p, pair);
+  } catch {}
+
+  return null;
+}
+export const TOPIC_RADAR_SYSTEM_PROMPT = `你是一名顶级的创作总监兼深度思考者，擅长将零散的知识切片升华为极具传播力、立意锋利的母稿创作选题方案。
+
+你的任务是：深度剖析系统提供的 2 到 4 张原子知识卡片，挖掘它们之间的底层机制联系、认知冲突或跨界映射，策划出 1 个立意深刻、结构严密的创作选题方案。
 
 ---
 
 ### 🚨 绝对禁止项（Negative Constraints）
 1. **严禁脱离素材空想**：文章核心论证链条必须完全由输入的卡片支撑，严禁自行捏造没有卡片依据的论据。
-2. **严禁平庸科普与学术课件风**：严禁起《浅谈X》、《关于Y的思考》、《X的3个技巧》等平淡标题。必须直击读者的【认知误区、痛点焦虑、反常识真相或执行代价】。
+2. **严禁平庸科普与学术课件风**：严禁起《浅谈X》、《关于Y的思考》、《X的3个技巧》等平淡标题。必须直击读者的【认知误区、痛点共鸣、反常识真相或实操机制】。
 3. **严禁假大空套话**：核心论点必须明确点出“前提条件 -> 作用机制 -> 意外结果”，严禁使用“提升认知”、“倒逼成长”等空泛词汇。
 
 ---
@@ -239,9 +447,9 @@ export const TOPIC_RADAR_SYSTEM_PROMPT = `你是一名顶级的全网自媒体�
 1. **立意锋利（Sharp Argument）**：
    - 用严格 2 句话讲透这篇文章的核心洞察，必须具备【反直觉感】或【痛点穿透力】。
 2. **多风格标题矩阵（3 选 1）**：
-   - **选项 1（痛点焦虑型）**：适合小红书/即刻，直击读者行为后果（例：“你以为在高效多线程，其实大脑在持续断崖式掉帧”）。
-   - **选项 2（反常识冲突型）**：适合公众号头条，击碎主流常识（例：“为什么越自律的人越容易内耗？聊聊意志力的残酷真相”）。
-   - **选项 3（实操干货型）**：适合技术/知乎/方法论长文，突出工程级解法（例：“告别玄学写代码：Vibe Coding 的边界锁定实战指南”）。
+   - **选项 1（痛点共鸣型）**：直击读者行为后果与痛点困境（例：“【痛点共鸣】别再盲目死磕了：为什么你越努力越容易掉进陷阱？”）。
+   - **选项 2（反常识洞察型）**：打破主流惯性认知，制造认知张力（例：“【反常识洞察】打破主流认知的真相：为什么说‘纯靠自律’是个伪命题？”）。
+   - **选项 3（机制拆解型）**：突出工程级机制解法与行动指南（例：“【机制拆解】从底层逻辑到实战落地：高效跃迁的操作指南”）。
 3. **大纲结构化与卡片锚定（Card-to-Section Mapping）**：
    - 大纲段落必须精确引用对应的 \`referenced_card_id\`（必须是输入中给定的卡片 ID），讲清该段落如何利用该卡片的内容展开。
 
@@ -254,13 +462,12 @@ export const TOPIC_RADAR_SYSTEM_PROMPT = `你是一名顶级的全网自媒体�
 {
   "topic_name": "核心选题主题（15字以内简短概括）",
   "angle_type": "paradox / intersection / deep_dive", 
-  "target_audience": "核心读者群体及他们的具体痛点画像",
-  "recommended_platform": "xiaohongshu / wechat / twitter / zhihu",
+  "target_audience": "核心受众群体及他们的具体痛点画像",
   "core_argument": "全篇核心论点（严格用2句话讲清机制与反常识真相）",
   "title_options": [
-    "【痛点焦虑型】备选标题1",
-    "【反常识冲突型】备选标题2",
-    "【实操干货型】备选标题3"
+    "【痛点共鸣】备选标题1",
+    "【反常识洞察】备选标题2",
+    "【机制拆解】备选标题3"
   ],
   "outline": [
     {
@@ -287,7 +494,7 @@ export const TOPIC_RADAR_SYSTEM_PROMPT = `你是一名顶级的全网自媒体�
 }`;
 
 /**
- * 运行智能选题雷达：从原子卡片库中通过碰撞策略生成全新选题并持久化
+ * 运行智能选题雷达：基于「知识簇聚合 + 黄金互补检索 + 三路路由」策划全新选题方案
  */
 export async function runTopicRadarMining(options: {
   angleType?: TopicRadarAngleType | "all";
@@ -296,10 +503,10 @@ export async function runTopicRadarMining(options: {
   const { angleType = "all", count = 3 } = options;
   const candidates = loadAllRadarCandidates();
 
-  if (candidates.length < 2) {
+  if (candidates.length === 0) {
     return {
       ran: false,
-      reason: "卡片库中原子卡片数量不足（需至少 2 张卡片），请先录入笔记萃取卡片",
+      reason: "知识库中暂无卡片资产，请先录入笔记萃取卡片",
       newNotesCount: 0,
       savedTopicsCount: 0,
       topics: [],
@@ -307,123 +514,120 @@ export async function runTopicRadarMining(options: {
   }
 
   const recentFingerprints = getRecentCollisionFingerprints(30);
-  const pairs = findCollisionPairs(candidates, {
+  const clusters = buildCardClusters(candidates, {
     preferredAngle: angleType,
-    limit: count * 2,
+    limit: count,
     excludeFingerprints: recentFingerprints,
   });
 
-  if (pairs.length === 0) {
+  if (clusters.length === 0) {
     return {
       ran: false,
-      reason: "近 30 天内所有有效卡片组合均已完成碰撞，无新碰撞组合（0 Token 消耗）",
+      reason: "当前知识库中的知识资产已完成最新选题策划。录入新笔记或提炼新卡片，即可激发全新碰撞灵感。",
       newNotesCount: 0,
       savedTopicsCount: 0,
       topics: [],
     };
   }
 
-  const selectedPairs = pairs.slice(0, count);
   const cfg = getByok();
+  if (!cfg) {
+    return {
+      ran: false,
+      reason: "请先在系统设置中配置大模型 API Key 后再触发选题雷达",
+      newNotesCount: clusters.length,
+      savedTopicsCount: 0,
+      topics: [],
+    };
+  }
+
   const topicAgent = getAgentForStage("topic");
   const savedTopics: TopicRepositoryItem[] = [];
+  let lastLlmError = "";
 
-  for (const pair of selectedPairs) {
+  for (const cluster of clusters) {
     let generated: RadarGeneratedOutput | null = null;
+    const pairFallback: CardCollisionPair = {
+      cards: [...cluster.cards, ...cluster.complementaryCards],
+      angleType: cluster.angleType,
+      fingerprint: cluster.fingerprint,
+      similarityScore: 0.8,
+      reason: cluster.reason,
+    };
 
-    if (cfg) {
-      try {
-        const provider = createOpenAICompatible({
-          name: "inkcraft",
-          baseURL: cfg.baseUrl,
-          apiKey: cfg.apiKey,
-        });
+    try {
+      const provider = createOpenAICompatible({
+        name: "inkcraft",
+        baseURL: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+      });
 
-        const cardsText = pair.cards
-          .map(
-            (c, i) =>
-              `【卡片 ${i + 1}】ID: ${c.id}\n- 标题/断言：${c.title}\n- 传播引子(Hook)：${c.hook || "无"}\n- 核心机制：${c.mechanism || "无"}\n- 边界/误区：${c.boundary || "无"}\n- 概念标签：${c.tags.join(", ") || "无"}\n- 来源笔记：《${c.noteTitle}》`,
-          )
-          .join("\n\n");
+      const clusterCardsText = cluster.cards
+        .map(
+          (c, i) =>
+            `【主知识簇卡片 ${i + 1}】ID: ${c.id}\n- 标题/断言：${c.title}\n- 传播引子(Hook)：${c.hook || "无"}\n- 核心机制：${c.mechanism || "无"}\n- 边界/误区：${c.boundary || "无"}\n- 领域标签：${c.tags.join(", ") || "无"}\n- 来源笔记：《${c.noteTitle}》`,
+        )
+        .join("\n\n");
 
-        const userPrompt = `本次碰撞策略：【${pair.angleType === "paradox" ? "反差碰撞（找认知张力）" : pair.angleType === "intersection" ? "跨界同构（跨领域隐喻）" : "专题纵深（系统化进阶）"}】\n\n【参与碰撞的原子知识卡片资产】：\n${cardsText}\n\n请严格按顶级自媒体内容总监标准，输出合法的纯 JSON 成文方案：`;
+      const compCardsText =
+        cluster.complementaryCards.length > 0
+          ? `\n\n【召回的同话题黄金互补旧卡】：\n` +
+            cluster.complementaryCards
+              .map(
+                (c, i) =>
+                  `【互补旧卡 ${i + 1}】ID: ${c.id}\n- 标题/断言：${c.title}\n- 核心机制：${c.mechanism || "无"}\n- 边界/误区：${c.boundary || "无"}\n- 来源笔记：《${c.noteTitle}》`,
+              )
+              .join("\n\n")
+          : "";
 
-        const { text } = await generateText({
-          model: provider.chatModel(topicAgent?.model || cfg.model),
-          system: topicAgent?.system_prompt || TOPIC_RADAR_SYSTEM_PROMPT,
-          prompt: userPrompt,
-          temperature: topicAgent?.temperature || 0.8,
-          maxRetries: 1,
-          abortSignal: AbortSignal.timeout(60_000),
-        });
+      const branchPromptDesc =
+        cluster.branch === "topic_network"
+          ? "【分支 C：专题全景方法论】请将整批知识卡片提炼为体系化、框架式的大纲与全景立论方案"
+          : cluster.branch === "topic_deepening"
+            ? "【分支 B：同题深化/知识簇贯通】请将知识簇内的多个原子卡片与互补视角融会贯通，产出深度认知反差的长文方案"
+            : "【分支 A：单点穿透】请聚焦该卡片本身的 Hook 与机制，做深度的单点痛点剖析与行动指南";
 
-        const start = text.indexOf("{");
-        const end = text.lastIndexOf("}");
-        if (start !== -1 && end > start) {
-          generated = JSON.parse(text.slice(start, end + 1)) as RadarGeneratedOutput;
-        }
-      } catch (err) {
-        console.error("[topic-radar] LLM error:", err);
+      const userPrompt = `本次创作策略：${branchPromptDesc}\n\n${clusterCardsText}${compCardsText}\n\n请直接输出合法的纯 JSON 格式母稿成文方案（严格遵循系统 JSON 格式，不输出任何思考或多余文字）：`;
+
+      const { text } = await generateText({
+        model: provider.chatModel(topicAgent?.model || cfg.model),
+        system: TOPIC_RADAR_SYSTEM_PROMPT,
+        prompt: userPrompt,
+        temperature: topicAgent?.temperature || 0.8,
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(180_000),
+      });
+
+      generated = extractJsonFromLlmText(text, pairFallback);
+      if (!generated) {
+        lastLlmError = "大模型输出未能解析为合法选题 JSON 结构";
       }
+    } catch (err) {
+      console.error("[topic-radar] LLM error:", err);
+      lastLlmError = err instanceof Error ? err.message : "大模型请求异常或超时";
     }
 
-    // 本地降级生成
     if (!generated) {
-      const c1 = pair.cards[0];
-      const c2 = pair.cards[1];
-      const p1 = c1.title.replace(/[。！？]$/, "");
-      const p2 = c2.title.replace(/[。！？]$/, "");
-
-      generated = {
-        topic_name: `${c1.tags[0] || "思维"}与${c2.tags[0] || "实践"}的张力破局`,
-        angle_type: pair.angleType,
-        target_audience: "关注个人成长与高效工程思维的知识创作者及自媒体读者",
-        recommended_platform: "wechat",
-        core_argument: `绝大多数人常误以为“${p1}”，然而在深层机制上，“${p2}”才是打破认知死循环的决定性抓手。`,
-        title_options: [
-          `【痛点焦虑型】别再盲目死磕了：为什么你越努力，越容易掉进「${p1}」的陷阱？`,
-          `【反常识冲突型】打破主流认知的残酷真相：为什么说「${p1}」往往是个伪命题？`,
-          `【实操干货型】从机制到行动：如何借助「${p2}」实现高效跃迁实战指南`,
-        ],
-        outline: [
-          {
-            step: "1. 破局引入（Hook）",
-            referenced_card_id: null,
-            guideline: "用日常场景中的普遍行为误区切入，点出为什么越想破局越焦虑",
-          },
-          {
-            step: "2. 核心机制剖析",
-            referenced_card_id: c1.id,
-            guideline: `依托《${c1.noteTitle}》，阐述核心机制运转规律与底层原理`,
-          },
-          {
-            step: "3. 认知误区或边界反转",
-            referenced_card_id: c2.id,
-            guideline: `依托《${c2.noteTitle}》，揭示适用边界，击碎读者惯性误区`,
-          },
-          {
-            step: "4. 落地行动指南",
-            referenced_card_id: null,
-            guideline: "给出 2 条清晰、可立即在实际工作流中执行的最小可行清单",
-          },
-        ],
-      };
+      continue;
     }
 
-    // 转换成标准平台技能
-    let targetSkill: PlatformSkillId = "wechat";
-    if (generated.recommended_platform === "xiaohongshu") targetSkill = "xiaohongshu";
-    else if (generated.recommended_platform === "zhihu") targetSkill = "zhihu";
-    else if (generated.recommended_platform === "twitter") targetSkill = "x_thread";
-    else if (generated.recommended_platform === "master") targetSkill = "master";
+    const targetSkill: PlatformSkillId = "master";
+    const titleOptions = Array.isArray(generated.title_options)
+      ? generated.title_options.map(String).filter(Boolean)
+      : [];
+    const mainTitle = String(
+      titleOptions[1] ||
+        titleOptions[0] ||
+        generated.topic_name ||
+        "",
+    ).trim();
 
-    // 默认选用第二个反常识或第一个痛点标题
-    const mainTitle =
-      generated.title_options?.[1] ||
-      generated.title_options?.[0] ||
-      generated.topic_name;
+    if (!mainTitle) {
+      continue;
+    }
 
-    const matchedCards = pair.cards.map((c) => ({
+    const allClusterCards = [...cluster.cards, ...cluster.complementaryCards];
+    const matchedCards = allClusterCards.map((c) => ({
       id: c.id,
       docId: c.docId,
       claim: c.title,
@@ -431,13 +635,14 @@ export async function runTopicRadarMining(options: {
       tag: c.tags[0] || "",
     }));
 
-    const structuredOutline: StructuredOutlineStep[] = (generated.outline || []).map(
-      (item) => ({
-        step: item.step,
-        referencedCardId: item.referenced_card_id || null,
+    const rawOutline = Array.isArray(generated.outline) ? generated.outline : [];
+    const structuredOutline: StructuredOutlineStep[] = rawOutline.map(
+      (item, idx) => ({
+        step: String(item?.step || `${idx + 1}. 论据展开`),
+        referencedCardId: item?.referenced_card_id ? String(item.referenced_card_id) : null,
         referencedCardTitle:
-          pair.cards.find((c) => c.id === item.referenced_card_id)?.title || null,
-        guideline: item.guideline,
+          allClusterCards.find((c) => c.id === item?.referenced_card_id)?.title || null,
+        guideline: String(item?.guideline || ""),
       }),
     );
 
@@ -445,18 +650,18 @@ export async function runTopicRadarMining(options: {
       (s) => `${s.step}：${s.guideline}`,
     );
 
-    const sourceNoteIds = Array.from(new Set(pair.cards.map((c) => c.docId)));
+    const sourceNoteIds = Array.from(new Set(allClusterCards.map((c) => c.docId)));
 
     const { topic } = saveTopicToRepository({
       title: mainTitle,
-      angle: generated.core_argument,
-      hook: generated.outline?.[0]?.guideline || "",
+      angle: String(generated.core_argument || "").trim(),
+      hook: String(rawOutline[0]?.guideline || "").trim(),
       targetSkill,
-      angleType: generated.angle_type || pair.angleType,
-      fingerprint: pair.fingerprint,
-      targetAudience: generated.target_audience,
-      titleOptions: generated.title_options,
-      coreArgument: generated.core_argument,
+      angleType: generated.angle_type || cluster.angleType,
+      fingerprint: cluster.fingerprint,
+      targetAudience: generated.target_audience || null,
+      titleOptions: titleOptions.length > 0 ? titleOptions : undefined,
+      coreArgument: String(generated.core_argument || "").trim() || null,
       outlineStructured: structuredOutline,
       outline: legacyOutline,
       matchedCards,
@@ -468,10 +673,84 @@ export async function runTopicRadarMining(options: {
     savedTopics.push(topic);
   }
 
+  if (savedTopics.length === 0) {
+    return {
+      ran: false,
+      reason: `大模型选题生成失败: ${lastLlmError || "大模型未返回有效方案"}`,
+      newNotesCount: clusters.length,
+      savedTopicsCount: 0,
+      topics: [],
+    };
+  }
+
+  setSetting(SETTING_KEY_LAST_SCANNED, new Date().toISOString());
+
   return {
     ran: true,
-    newNotesCount: selectedPairs.length,
+    newNotesCount: clusters.length,
     savedTopicsCount: savedTopics.length,
     topics: savedTopics,
+  };
+}
+
+/**
+ * 触发异步雷达挖掘任务（非阻塞后台运行）
+ */
+export function triggerTopicRadarMiningAsync(options: {
+  angleType?: TopicRadarAngleType | "all";
+  count?: number;
+}): { started: boolean; message: string; state: TopicMiningState } {
+  const currentState = getTopicMiningState();
+  if (currentState.isMining) {
+    return {
+      started: false,
+      message: "选题雷达正在深度碰撞中，请稍候...",
+      state: currentState,
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  setSetting(SETTING_KEY_MINING_STATUS, "running");
+  setSetting(SETTING_KEY_MINING_STARTED_AT, nowIso);
+  setSetting(SETTING_KEY_MINING_LOCK, nowIso);
+
+  // 异步执行（后台 Promise，不阻塞 HTTP 响应）
+  runTopicRadarMining(options)
+    .then((res) => {
+      const completedIso = new Date().toISOString();
+      setSetting(SETTING_KEY_LAST_SCANNED, completedIso);
+      setSetting(SETTING_KEY_MINING_STATUS, "completed");
+      setSetting(SETTING_KEY_MINING_LOCK, "");
+      setSetting(
+        SETTING_KEY_MINING_LAST_RESULT,
+        JSON.stringify({
+          ran: res.ran,
+          reason: res.reason,
+          newNotesCount: res.newNotesCount,
+          savedTopicsCount: res.savedTopicsCount,
+          completedAt: completedIso,
+        }),
+      );
+    })
+    .catch((err) => {
+      console.error("[topic-radar] async mining error:", err);
+      const completedIso = new Date().toISOString();
+      setSetting(SETTING_KEY_LAST_SCANNED, completedIso);
+      setSetting(SETTING_KEY_MINING_STATUS, "failed");
+      setSetting(SETTING_KEY_MINING_LOCK, "");
+      setSetting(
+        SETTING_KEY_MINING_LAST_RESULT,
+        JSON.stringify({
+          ran: false,
+          error: err instanceof Error ? err.message : "雷达碰撞异常中断",
+          completedAt: completedIso,
+        }),
+      );
+    });
+
+  return {
+    started: true,
+    message: "智能雷达碰撞任务已在后台启动",
+    state: getTopicMiningState(),
   };
 }

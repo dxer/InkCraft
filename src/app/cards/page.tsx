@@ -2,13 +2,16 @@
 
 import {
   Check,
+  CheckSquare,
   Compass,
   Copy,
   FileText,
   IdCard,
+  Layers,
   MessageSquare,
   PenLine,
   Share2,
+  ShieldAlert,
   Sparkles,
   Tag,
   Trash2,
@@ -101,9 +104,11 @@ export default function CardsPage() {
     fetchCards();
   }, [fetchCards]);
 
-  // 解析全部卡片为标准原子卡对象
+  // 解析全部卡片为标准原子卡对象，严格按创建时间倒序展示
   const parsedCards = useMemo(() => {
-    return cards.map(parseCardItem);
+    return cards
+      .map(parseCardItem)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [cards]);
 
   // 收集所有标签
@@ -391,6 +396,139 @@ export default function CardsPage() {
   );
 }
 
+interface CardSection {
+  title: string;
+  type: "mechanism" | "boundary" | "action" | "general";
+  content: string;
+}
+
+function parseBodySections(body: string): CardSection[] {
+  if (!body) return [];
+  const lines = body.split("\n");
+  const sections: CardSection[] = [];
+  let currentTitle = "";
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    if (currentTitle || currentLines.length > 0) {
+      const trimmedTitle = currentTitle.trim();
+      let type: CardSection["type"] = "general";
+      if (
+        trimmedTitle.includes("机制") ||
+        trimmedTitle.includes("原理") ||
+        trimmedTitle.includes("主张")
+      ) {
+        type = "mechanism";
+      } else if (
+        trimmedTitle.includes("边界") ||
+        trimmedTitle.includes("误区") ||
+        trimmedTitle.includes("约束") ||
+        trimmedTitle.includes("场景")
+      ) {
+        type = "boundary";
+      } else if (
+        trimmedTitle.includes("行动") ||
+        trimmedTitle.includes("落地") ||
+        trimmedTitle.includes("实操") ||
+        trimmedTitle.includes("步骤")
+      ) {
+        type = "action";
+      }
+
+      sections.push({
+        title: trimmedTitle,
+        type,
+        content: currentLines.join("\n").trim(),
+      });
+      currentTitle = "";
+      currentLines = [];
+    }
+  };
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^#{1,4}\s+(.+)$/);
+    if (headingMatch) {
+      flush();
+      currentTitle = headingMatch[1].trim();
+    } else {
+      currentLines.push(line);
+    }
+  }
+  flush();
+
+  return sections;
+}
+
+function CardBodySectionsView({ body }: { body: string }) {
+  const sections = useMemo(() => parseBodySections(body), [body]);
+
+  if (sections.length === 0) {
+    return <MdText text={body} className="text-xs sm:text-sm" />;
+  }
+
+  return (
+    <div className="space-y-3.5">
+      {sections.map((sec, idx) => {
+        if (!sec.content && !sec.title) return null;
+
+        const config =
+          sec.type === "mechanism"
+            ? {
+                label: sec.title || "核心机制",
+                icon: Layers,
+                border: "border-blue-500/25 bg-blue-500/5",
+                titleColor: "text-blue-600 dark:text-blue-400",
+              }
+            : sec.type === "boundary"
+              ? {
+                  label: sec.title || "适用边界与认知误区",
+                  icon: ShieldAlert,
+                  border: "border-purple-500/25 bg-purple-500/5",
+                  titleColor: "text-purple-600 dark:text-purple-400",
+                }
+              : sec.type === "action"
+                ? {
+                    label: sec.title || "落地行动",
+                    icon: CheckSquare,
+                    border: "border-emerald-500/25 bg-emerald-500/5",
+                    titleColor: "text-emerald-600 dark:text-emerald-400",
+                  }
+                : {
+                    label: sec.title || "内容详情",
+                    icon: FileText,
+                    border: "border-border/70 bg-card",
+                    titleColor: "text-foreground font-bold",
+                  };
+
+        const Icon = config.icon;
+
+        return (
+          <div
+            key={idx}
+            className={cn(
+              "rounded-xl border p-4 sm:p-4.5 shadow-2xs space-y-2.5 transition-all",
+              config.border,
+            )}
+          >
+            {config.label && (
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-bold tracking-tight pb-1.5 border-b border-border/40",
+                  config.titleColor,
+                )}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                <span>{config.label}</span>
+              </div>
+            )}
+            <MdText text={sec.content} className="text-xs sm:text-sm leading-relaxed" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 完整卡片详情弹窗 */
 function CardDetailDialog({
   card,
@@ -417,28 +555,29 @@ function CardDetailDialog({
         className="gap-0 overflow-hidden rounded-2xl p-0 w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-3xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader className="border-b bg-muted/30 px-4 sm:px-6 py-3.5 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 pr-8">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex size-7 sm:size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <DialogHeader className="border-b bg-muted/30 px-4 sm:px-6 py-4">
+          <div className="flex flex-col gap-2.5 pr-8">
+            <div className="flex items-start gap-3 min-w-0">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary mt-0.5">
                 <IdCard className="size-4" />
               </span>
-              <div className="min-w-0">
-                <DialogTitle className="text-sm sm:text-base font-semibold truncate">
+              <div className="min-w-0 flex-1 space-y-1">
+                <DialogTitle className="text-sm sm:text-base font-bold tracking-tight text-foreground leading-snug break-words">
                   {card.title}
                 </DialogTitle>
-                <DialogDescription className="truncate text-xs text-muted-foreground mt-0.5">
-                  来源笔记：《{card.noteTitle}》
+                <DialogDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 break-words">
+                  <span className="font-medium text-foreground/70">来源笔记：</span>
+                  <span className="break-words">《{card.noteTitle}》</span>
                 </DialogDescription>
               </div>
             </div>
 
             {card.tags && card.tags.length > 0 && (
-              <div className="flex shrink-0 flex-wrap gap-1 sm:gap-1.5">
+              <div className="flex flex-wrap gap-1.5 pl-11">
                 {card.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs text-secondary-foreground"
+                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground font-medium"
                   >
                     <Tag className="size-2.5 sm:size-3 opacity-60" />
                     {tag}
@@ -452,25 +591,25 @@ function CardDetailDialog({
         <div className="no-scrollbar max-h-[62vh] overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4">
           {/* 自媒体 Hook 专属高亮块 */}
           {card.hook && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:p-4 shadow-2xs">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
                 <Zap className="size-3.5" />
-                自媒体痛点切入点（Hook / 爆款引子）
+                <span>自媒体痛点切入点（Hook / 爆款引子）</span>
               </div>
-              <p className="mt-1.5 text-xs sm:text-sm font-medium leading-relaxed text-amber-900 dark:text-amber-100">
+              <p className="mt-2 text-xs sm:text-sm font-medium leading-relaxed text-amber-900 dark:text-amber-100">
                 {card.hook}
               </p>
             </div>
           )}
 
-          {/* 卡片纯净 Markdown 正文渲染 */}
-          <MdText text={card.body} className="leading-relaxed text-xs sm:text-sm" />
+          {/* 卡片结构化板块（核心机制 / 适用边界 / 落地行动）清晰分段渲染 */}
+          <CardBodySectionsView body={card.body} />
         </div>
 
         {/* 底栏 */}
         <div className="flex items-center justify-between gap-2 sm:gap-3 border-t bg-muted/30 px-4 sm:px-6 py-3 sm:py-3.5">
           <span className="truncate text-[10px] sm:text-[11px] text-muted-foreground">
-            {formatCardDate(card.updatedAt)}
+            {formatCardDate(card.createdAt || card.updatedAt)}
           </span>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Button

@@ -208,7 +208,7 @@ export function getCardForDoc(docId: string): KnowledgeCard | null {
   return cards[0] ?? null;
 }
 
-/** 获取全部卡片（带笔记标题与笔记受控标签，供卡片库与图谱画廊用） */
+/** 获取全部卡片（带笔记标题与笔记受控标签，按创建时间倒序） */
 export function getAllCards(): (KnowledgeCard & { note_title: string | null; note_tags?: string[] })[] {
   const db = getDb();
   const rows = db
@@ -217,7 +217,7 @@ export function getAllCards(): (KnowledgeCard & { note_title: string | null; not
               ki.title AS note_title, ki.tags AS note_tags_raw
        FROM knowledge_cards c
        JOIN knowledge_items ki ON ki.id = c.document_id
-       ORDER BY c.updated_at DESC, c.created_at ASC`
+       ORDER BY c.created_at DESC`
     )
     .all() as (KnowledgeCard & { note_title: string | null; note_tags_raw: string | null })[];
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowRight,
   BookOpen,
   Check,
@@ -8,20 +9,18 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Compass,
   FileText,
   Flame,
   GitFork,
   IdCard,
+  Info,
   Layers,
   Lightbulb,
   Loader2,
-  MessageSquare,
   PenLine,
   Plus,
   RefreshCw,
   Search,
-  Share2,
   Sparkles,
   Tag,
   Trash2,
@@ -89,19 +88,51 @@ const RADAR_ANGLES: Array<{
   },
 ];
 
+function formatLastScannedTime(isoString: string | null | undefined): string {
+  if (!isoString) return "尚未执行";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return "尚未执行";
+    const now = new Date();
+    const isToday =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+
+    if (isToday) {
+      return `今天 ${hours}:${minutes}`;
+    }
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  } catch {
+    return "尚未执行";
+  }
+}
+
+interface MineNoticeState {
+  type: "running" | "success" | "info" | "error";
+  title: string;
+  message?: string;
+}
+
 export default function TopicsPage() {
   const router = useRouter();
   const [topics, setTopics] = useState<TopicRepositoryItem[]>([]);
   const [stats, setStats] = useState<TopicStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [mining, setMining] = useState(false);
-  const [mineNotice, setMineNotice] = useState<string | null>(null);
+  const [mineNotice, setMineNotice] = useState<MineNoticeState | null>(null);
 
   // 筛选与搜索
   const [search, setSearch] = useState("");
   const [activeAngle, setActiveAngle] = useState<TopicRadarAngleType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "idea" | "used" | "archived">("all");
-  const [skillFilter, setSkillFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"score" | "created">("score");
 
   // 创作者自定义选中的备选标题字典：topicId -> selectedTitleIndex (0, 1, 2)
@@ -117,7 +148,6 @@ export default function TopicsPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      if (skillFilter !== "all") params.set("targetSkill", skillFilter);
       if (activeAngle !== "all") params.set("angleType", activeAngle);
       if (search.trim()) params.set("search", search.trim());
 
@@ -127,15 +157,70 @@ export default function TopicsPage() {
         const list: TopicRepositoryItem[] = data.topics || [];
         setTopics(list);
         setStats(data.stats || null);
+        if (data.stats?.miningState?.isMining) {
+          setMining(true);
+          setMineNotice({
+            type: "running",
+            title: "雷达深度策划中",
+            message: "正在对知识簇进行高维重组与大纲策划，请稍候…",
+          });
+        }
       }
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, skillFilter, activeAngle, search]);
+  }, [statusFilter, activeAngle, search]);
 
   useEffect(() => {
     fetchTopics();
   }, [fetchTopics]);
+
+  // 轮询后台挖掘状态（防用户切换页面后丢失感知）
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+
+    if (mining) {
+      timer = setInterval(async () => {
+        try {
+          const res = await fetch("/api/topics/mine");
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.isMining) {
+              setMining(false);
+              await fetchTopics();
+              if (data.lastResult) {
+                if (data.lastResult.ran) {
+                  setMineNotice({
+                    type: "success",
+                    title: "选题策划完成",
+                    message: `已基于最新知识簇成功策划并入库 ${data.lastResult.savedTopicsCount ?? 1} 个多风格深度成文方案`,
+                  });
+                } else if (data.lastResult.error) {
+                  setMineNotice({
+                    type: "error",
+                    title: "选题策划中断",
+                    message: data.lastResult.error,
+                  });
+                } else {
+                  setMineNotice({
+                    type: "info",
+                    title: "知识储备已充分挖掘",
+                    message:
+                      data.lastResult.reason ||
+                      "当前知识库中的知识资产已完成最新选题策划。录入新笔记或卡片即可激发全新碰撞灵感。",
+                  });
+                }
+              }
+            }
+          }
+        } catch {}
+      }, 2500);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [mining, fetchTopics]);
 
   const sortedTopics = [...topics].sort((a, b) => {
     if (sortBy === "score") {
@@ -144,11 +229,16 @@ export default function TopicsPage() {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  // 触发智能雷达碰撞
+  // 触发智能雷达碰撞（异步非阻塞执行）
   async function handleTriggerRadarMining() {
     if (mining) return;
     setMining(true);
-    setMineNotice(null);
+    setMineNotice({
+      type: "running",
+      title: "雷达深度策划中",
+      message: "正在对知识簇进行高维重组与大纲策划，请稍候…",
+    });
+
     try {
       const res = await fetch("/api/topics/mine", {
         method: "POST",
@@ -160,17 +250,28 @@ export default function TopicsPage() {
         }),
       });
       const data = await res.json();
-      if (data.ran) {
-        setMineNotice(
-          `雷达碰撞完成！精选 ${data.newNotesCount} 组卡片资产，成功策划并入库 ${data.savedTopicsCount} 个多风格自媒体成文方案`,
-        );
-      } else {
-        setMineNotice(data.reason || "当前无新碰撞组合（0 Token 消耗）");
+      if (res.ok && data.accepted) {
+        // 保持 running 状态，等待轮询获取结果
+      } else if (res.status === 409 || data.running) {
+        setMineNotice({
+          type: "running",
+          title: "雷达任务运行中",
+          message: data.error || "选题雷达正在深度碰撞中，请稍候...",
+        });
+      } else if (!res.ok) {
+        setMineNotice({
+          type: "error",
+          title: "雷达启动失败",
+          message: data.error || "大模型请求异常，请检查设置与网络",
+        });
+        setMining(false);
       }
-      await fetchTopics();
     } catch {
-      setMineNotice("雷达碰撞执行失败，请检查网络或配置");
-    } finally {
+      setMineNotice({
+        type: "error",
+        title: "网络请求异常",
+        message: "未能连接到服务，请稍后重试",
+      });
       setMining(false);
     }
   }
@@ -259,21 +360,6 @@ export default function TopicsPage() {
     setNavigatingId(null);
   }
 
-  const getSkillIcon = (id: string) => {
-    switch (id) {
-      case "wechat":
-        return <MessageSquare className="size-3 text-emerald-500 shrink-0" />;
-      case "xiaohongshu":
-        return <Sparkles className="size-3 text-rose-500 shrink-0" />;
-      case "zhihu":
-        return <Compass className="size-3 text-blue-500 shrink-0" />;
-      case "x_thread":
-        return <Share2 className="size-3 text-zinc-700 dark:text-zinc-300 shrink-0" />;
-      default:
-        return <FileText className="size-3 text-purple-500 shrink-0" />;
-    }
-  };
-
   return (
     <div className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6 md:p-8 pb-24">
       {/* 顶部标题与雷达触发区 */}
@@ -298,17 +384,32 @@ export default function TopicsPage() {
           </p>
         </div>
 
-        {/* 触发雷达碰撞主按钮 */}
-        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto">
+        {/* 触发雷达碰撞主操作区：包含上次碰撞时间展示与防重复触发按钮 */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start sm:self-auto">
+          <div
+            className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 px-2.5 py-1.5 rounded-xl shadow-2xs"
+            title={
+              stats?.lastScannedAt
+                ? `上次碰撞时间：${new Date(stats.lastScannedAt).toLocaleString("zh-CN")}`
+                : "尚未执行过智能雷达碰撞"
+            }
+          >
+            <Clock className="size-3.5 text-muted-foreground/70 shrink-0" />
+            <span className="text-[11px] text-muted-foreground">上次选题：</span>
+            <span className="font-mono text-[11px] font-medium text-foreground">
+              {formatLastScannedTime(stats?.lastScannedAt)}
+            </span>
+          </div>
+
           <Button
             size="sm"
             onClick={handleTriggerRadarMining}
             disabled={mining}
-            className="h-8.5 gap-1.5 rounded-xl text-xs font-semibold cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90"
-            title="以当前选中的碰撞模式触发卡片高维重组"
+            className="h-8.5 gap-1.5 rounded-xl text-xs font-semibold cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-75 disabled:cursor-not-allowed"
+            title={mining ? "选题雷达正在后台深度碰撞，请稍候..." : "以当前选中的碰撞模式触发卡片高维重组"}
           >
             {mining ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin text-primary-foreground" />
             ) : (
               <Sparkles className="size-3.5 text-amber-300 fill-amber-300" />
             )}
@@ -317,17 +418,51 @@ export default function TopicsPage() {
         </div>
       </div>
 
-      {/* 碰撞反馈提示条 */}
+      {/* 碰撞反馈提示条（根据执行中、成功、已饱和、失败差异化渲染） */}
       {mineNotice && (
-        <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2 text-xs text-foreground animate-in fade-in duration-150">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-primary shrink-0" />
-            <span>{mineNotice}</span>
+        <div
+          className={cn(
+            "flex items-start justify-between gap-3 rounded-xl border p-3.5 sm:p-4 text-xs animate-in fade-in duration-150 shadow-2xs",
+            mineNotice.type === "running" &&
+              "border-primary/30 bg-primary/5 text-primary",
+            mineNotice.type === "success" &&
+              "border-emerald-500/30 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200",
+            mineNotice.type === "info" &&
+              "border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-200",
+            mineNotice.type === "error" &&
+              "border-destructive/30 bg-destructive/10 text-destructive",
+          )}
+        >
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            {mineNotice.type === "running" && (
+              <Loader2 className="size-4.5 animate-spin text-primary shrink-0 mt-0.5" />
+            )}
+            {mineNotice.type === "success" && (
+              <CheckCircle2 className="size-4.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            )}
+            {mineNotice.type === "info" && (
+              <Sparkles className="size-4.5 text-amber-500 shrink-0 mt-0.5" />
+            )}
+            {mineNotice.type === "error" && (
+              <AlertCircle className="size-4.5 text-destructive shrink-0 mt-0.5" />
+            )}
+
+            <div className="space-y-0.5 min-w-0">
+              <div className="font-bold text-xs leading-snug">
+                {mineNotice.title}
+              </div>
+              {mineNotice.message && (
+                <p className="text-[11px] opacity-90 leading-relaxed break-words">
+                  {mineNotice.message}
+                </p>
+              )}
+            </div>
           </div>
+
           <button
             type="button"
             onClick={() => setMineNotice(null)}
-            className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+            className="text-[11px] opacity-70 hover:opacity-100 cursor-pointer shrink-0 font-medium px-1.5 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5"
           >
             关闭
           </button>
@@ -436,45 +571,6 @@ export default function TopicsPage() {
             </div>
           </div>
         </div>
-
-        {/* 平台技能标签 */}
-        <div className="flex items-center gap-1.5 text-xs pt-1 border-t border-border/40 overflow-x-auto no-scrollbar">
-          <span className="text-[11px] font-medium text-muted-foreground shrink-0">
-            适配平台:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSkillFilter("all")}
-            className={cn(
-              "rounded px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer border",
-              skillFilter === "all"
-                ? "bg-foreground text-background font-semibold border-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted",
-            )}
-          >
-            全部 ({topics.length})
-          </button>
-
-          {PLATFORM_SKILLS.map((s) => {
-            const count = topics.filter((t) => (t.targetSkill || "wechat") === s.id).length;
-            const active = skillFilter === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSkillFilter(s.id)}
-                className={cn(
-                  "rounded px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer border",
-                  active
-                    ? cn(s.color, "font-semibold shadow-2xs border-current")
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted",
-                )}
-              >
-                {s.name} ({count})
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* 选题雷达卡片流 */}
@@ -505,8 +601,6 @@ export default function TopicsPage() {
       ) : (
         <div className="space-y-3.5">
           {sortedTopics.map((topic) => {
-            const skillMeta =
-              PLATFORM_SKILLS.find((s) => s.id === topic.targetSkill) || PLATFORM_SKILLS[0];
             const isUsed = topic.status === "used";
             const isArchived = topic.status === "archived";
             const selectedIdx = selectedTitles[topic.id] ?? 0;
@@ -538,17 +632,12 @@ export default function TopicsPage() {
                   {/* 顶栏元数据 */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-semibold flex items-center gap-1.5", skillMeta.color)}>
-                        {getSkillIcon(topic.targetSkill)}
-                        <span>{skillMeta.name}</span>
-                      </span>
-
                       <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-semibold border", angleTag.color)}>
                         {angleTag.label}
                       </span>
 
                       {topic.targetAudience && (
-                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
                           <Users className="size-3" />
                           <span>受众: {topic.targetAudience}</span>
                         </span>
@@ -674,11 +763,13 @@ export default function TopicsPage() {
                             {topic.matchedCards.map((card, cIdx) => (
                               <span
                                 key={cIdx}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-secondary/80 border border-border/60 px-2 py-0.5 text-[11px] text-foreground font-medium"
-                                title={card.claim}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-secondary/80 border border-border/60 px-2.5 py-1 text-[11px] text-foreground font-medium max-w-full"
+                                title={`卡片断言：${card.claim}${card.noteTitle ? `\n来源笔记：《${card.noteTitle}》` : ""}`}
                               >
-                                <span className="size-1.5 rounded-full bg-primary" />
-                                {card.noteTitle ? `《${card.noteTitle}》` : card.claim}
+                                <span className="size-1.5 rounded-full bg-primary shrink-0" />
+                                <span className="truncate max-w-[360px] sm:max-w-[480px]">
+                                  {card.claim || (card.noteTitle ? `《${card.noteTitle}》` : "原子卡片")}
+                                </span>
                               </span>
                             ))}
                           </div>

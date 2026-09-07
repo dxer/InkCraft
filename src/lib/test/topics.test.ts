@@ -1,12 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { setSetting } from "../settings";
+import { triggerTopicRadarMiningAsync } from "../topic-radar";
 import {
   batchSaveTopicsToRepository,
   checkAndMineHourlyTopics,
   deleteTopicFromDb,
+  getTopicMiningState,
   getTopicStats,
   getTopicsFromDb,
   saveTopicToRepository,
+  SETTING_KEY_MINING_STARTED_AT,
+  SETTING_KEY_MINING_STATUS,
   updateTopicStatusInDb,
 } from "../topics";
 
@@ -92,11 +97,41 @@ test("updateTopicStatusInDb & getTopicsFromDb: 状态更新与条件筛选", () 
 
 test("checkAndMineHourlyTopics: 无新笔记时自动跳过，消耗 0 Token", async () => {
   // 设置上次扫描时间为未来很远的时间点，确保无新笔记
-  const { setSetting } = await import("../settings");
   setSetting("topic_mining.last_scanned_at", new Date(Date.now() + 100000).toISOString());
 
   const result = await checkAndMineHourlyTopics({ force: true });
   assert.equal(result.ran, false);
   assert.equal(result.newNotesCount, 0);
   assert.match(result.reason || "", /跳过选题生成/);
+});
+
+test("getTopicMiningState: 正确识别 running 状态与防重复触发", () => {
+  // 模拟空闲状态
+  setSetting(SETTING_KEY_MINING_STATUS, "idle");
+  const s1 = getTopicMiningState();
+  assert.equal(s1.isMining, false);
+
+  // 模拟正在运行
+  setSetting(SETTING_KEY_MINING_STATUS, "running");
+  setSetting(SETTING_KEY_MINING_STARTED_AT, new Date().toISOString());
+  const s2 = getTopicMiningState();
+  assert.equal(s2.isMining, true);
+  assert.equal(s2.status, "running");
+
+  // 正在运行时再次触发必须被拒绝
+  const res = triggerTopicRadarMiningAsync({ count: 1 });
+  assert.equal(res.started, false);
+  assert.match(res.message, /深度碰撞中/);
+
+  // 模拟任务超时自动复位（超过 10 分钟）
+  const elevenMinsAgo = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+  setSetting(SETTING_KEY_MINING_STATUS, "running");
+  setSetting(SETTING_KEY_MINING_STARTED_AT, elevenMinsAgo);
+
+  const s3 = getTopicMiningState();
+  assert.equal(s3.isMining, false);
+  assert.equal(s3.status, "idle");
+
+  // 清理复位
+  setSetting(SETTING_KEY_MINING_STATUS, "idle");
 });

@@ -4,6 +4,7 @@ import type { KnowledgeCard } from "@/lib/types";
 export interface CardListItem extends KnowledgeCard {
   note_title: string | null;
   note_tags?: string[];
+  created_at?: string;
   updated_at: string;
 }
 
@@ -11,6 +12,7 @@ export interface ParsedCardItem {
   id: string;
   documentId: string;
   noteTitle: string;
+  createdAt: string;
   updatedAt: string;
   title: string;
   tags: string[];
@@ -92,6 +94,7 @@ export function parseCardItem(card: CardListItem): ParsedCardItem {
     id: card.id,
     documentId: card.document_id,
     noteTitle: card.note_title || "未命名笔记",
+    createdAt: card.created_at || card.updated_at || new Date().toISOString(),
     updatedAt: card.updated_at,
     title: title || "原子知识卡片",
     tags,

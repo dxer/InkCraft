@@ -68,7 +68,7 @@ export function CardsMasonryView({
                   《{card.noteTitle}》
                 </span>
                 <span className="shrink-0 text-[10px] text-muted-foreground/70 tabular-nums">
-                  {formatCardDate(card.updatedAt)}
+                  {formatCardDate(card.createdAt || card.updatedAt)}
                 </span>
               </div>
 

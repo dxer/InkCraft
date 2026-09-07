@@ -52,7 +52,9 @@ export function CardsCompactTableView({
     return [...cards].sort((a, b) => {
       let cmp = 0;
       if (sortField === "date") {
-        cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+        cmp =
+          new Date(a.createdAt || a.updatedAt).getTime() -
+          new Date(b.createdAt || b.updatedAt).getTime();
       } else if (sortField === "title") {
         cmp = a.title.localeCompare(b.title, "zh-CN");
       } else if (sortField === "note") {
@@ -100,7 +102,7 @@ export function CardsCompactTableView({
                 className="py-3 px-3 cursor-pointer hover:text-foreground transition-colors min-w-[100px]"
               >
                 <div className="flex items-center gap-1">
-                  <span>更新时间</span>
+                  <span>创建时间</span>
                   <ArrowUpDown className="size-3" />
                 </div>
               </th>
@@ -186,7 +188,7 @@ export function CardsCompactTableView({
                 <td className="py-3 px-3 tabular-nums text-muted-foreground/80 text-[11px] whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     <Calendar className="size-3 text-muted-foreground/50 shrink-0" />
-                    <span>{formatCardDate(card.updatedAt)}</span>
+                    <span>{formatCardDate(card.createdAt || card.updatedAt)}</span>
                   </div>
                 </td>
 

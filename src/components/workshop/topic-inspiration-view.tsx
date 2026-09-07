@@ -388,16 +388,17 @@ export function TopicInspirationView({
                           <div className="pt-2 border-t border-border/40">
                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1.5">
                               <IdCard className="size-3 text-primary" />
-                              <span>关联知识储备 ({item.matchedCards.length})：</span>
+                              <span>关联知识卡片 ({item.matchedCards.length})：</span>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {item.matchedCards.slice(0, 2).map((card, cIdx) => (
                                 <span
                                   key={card.id || cIdx}
-                                  className="inline-block rounded-md bg-primary/5 border border-primary/15 px-2 py-0.5 text-[10px] text-primary truncate max-w-[220px]"
-                                  title={card.claim}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary/5 border border-primary/15 px-2 py-0.5 text-[10px] text-primary truncate max-w-[260px]"
+                                  title={`卡片断言：${card.claim}${card.noteTitle ? `\n来源笔记：《${card.noteTitle}》` : ""}`}
                                 >
-                                  {card.noteTitle ? `《${card.noteTitle}》` : card.claim}
+                                  <span className="size-1 rounded-full bg-primary shrink-0" />
+                                  <span className="truncate">{card.claim || (card.noteTitle ? `《${card.noteTitle}》` : "原子卡片")}</span>
                                 </span>
                               ))}
                             </div>

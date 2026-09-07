@@ -5,7 +5,11 @@ import { parseCardFields } from "./card-md";
 import { getDb } from "./db";
 import { getAgentForStage } from "./pipeline";
 import { getByok, getSettings, setSetting } from "./settings";
-import { type PlatformSkillId, type TopicRepositoryItem } from "./types";
+import {
+  type PlatformSkillId,
+  type TopicRadarAngleType,
+  type TopicRepositoryItem,
+} from "./types";
 
 export interface TopicFilterOptions {
   status?: "all" | "idea" | "used" | "archived";
@@ -16,6 +20,21 @@ export interface TopicFilterOptions {
   offset?: number;
 }
 
+export interface TopicMiningState {
+  isMining: boolean;
+  status: "idle" | "running" | "completed" | "failed";
+  startedAt: string | null;
+  lastScannedAt: string | null;
+  lastResult: {
+    ran: boolean;
+    reason?: string;
+    newNotesCount?: number;
+    savedTopicsCount?: number;
+    error?: string;
+    completedAt?: string;
+  } | null;
+}
+
 export interface TopicStats {
   total: number;
   ideas: number;
@@ -24,12 +43,16 @@ export interface TopicStats {
   bySkill: Record<string, number>;
   lastScannedAt: string | null;
   newNotesSinceLastScan: number;
+  miningState?: TopicMiningState;
 }
 
-const SETTING_KEY_LAST_SCANNED = "topic_mining.last_scanned_at";
+export const SETTING_KEY_LAST_SCANNED = "topic_mining.last_scanned_at";
+export const SETTING_KEY_MINING_STATUS = "topic_mining.status";
+export const SETTING_KEY_MINING_STARTED_AT = "topic_mining.started_at";
+export const SETTING_KEY_MINING_LAST_RESULT = "topic_mining.last_result";
 // 挖掘运行锁：用 DB 标志位而非模块变量 —— instrumentation 定时器与路由 handler 属于不同 bundle，
 // 模块级状态互不可见；DB 标志对二者同时生效，防并发挖掘烧双份 Token。
-const SETTING_KEY_MINING_LOCK = "topic_mining.lock_at";
+export const SETTING_KEY_MINING_LOCK = "topic_mining.lock_at";
 
 const SKILL_NAME_MAP: Record<PlatformSkillId, string> = {
   wechat: "微信公众号 · 深度叙事",
@@ -280,6 +303,118 @@ export function getTopicStats(): TopicStats {
     bySkill,
     lastScannedAt,
     newNotesSinceLastScan: newNotesCount,
+    miningState: getTopicMiningState(),
+  };
+}
+
+/**
+ * 获取当前选题雷达挖掘任务状态（自动处理 5 分钟超时容错）
+ */
+export function getTopicMiningState(): TopicMiningState {
+  const settings = getSettings();
+  const rawStatus = settings[SETTING_KEY_MINING_STATUS] || "idle";
+  const startedAt = settings[SETTING_KEY_MINING_STARTED_AT] || null;
+  const lastScannedAt = settings[SETTING_KEY_LAST_SCANNED] || null;
+  let lastResult: TopicMiningState["lastResult"] = null;
+
+  if (settings[SETTING_KEY_MINING_LAST_RESULT]) {
+    try {
+      lastResult = JSON.parse(settings[SETTING_KEY_MINING_LAST_RESULT]);
+    } catch {}
+  }
+
+  // 超时判定（超过 10 分钟自动解除 running 状态，避免进程中断死锁）
+  const now = Date.now();
+  const isExpired =
+    rawStatus === "running" &&
+    startedAt &&
+    now - Date.parse(startedAt) > 10 * 60 * 1000;
+
+  if (isExpired) {
+    setSetting(SETTING_KEY_MINING_STATUS, "idle");
+    setSetting(SETTING_KEY_MINING_LOCK, "");
+    return {
+      isMining: false,
+      status: "idle",
+      startedAt,
+      lastScannedAt,
+      lastResult: {
+        ran: false,
+        reason: "上次选题挖掘任务超时（>10分钟）已自动解除锁定",
+        completedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  const isMining = rawStatus === "running";
+  return {
+    isMining,
+    status: isMining ? "running" : (rawStatus as TopicMiningState["status"]),
+    startedAt,
+    lastScannedAt,
+    lastResult,
+  };
+}
+
+/**
+ * 触发异步每小时增量挖掘（非阻塞后台运行）
+ */
+export function triggerHourlyMiningAsync(options: { force?: boolean } = {}): {
+  started: boolean;
+  message: string;
+  state: TopicMiningState;
+} {
+  const currentState = getTopicMiningState();
+  if (currentState.isMining) {
+    return {
+      started: false,
+      message: "已有选题挖掘任务在运行中，请稍候...",
+      state: currentState,
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  setSetting(SETTING_KEY_MINING_STATUS, "running");
+  setSetting(SETTING_KEY_MINING_STARTED_AT, nowIso);
+  setSetting(SETTING_KEY_MINING_LOCK, nowIso);
+
+  checkAndMineHourlyTopics(options)
+    .then((res) => {
+      const completedIso = new Date().toISOString();
+      setSetting(SETTING_KEY_LAST_SCANNED, completedIso);
+      setSetting(SETTING_KEY_MINING_STATUS, "completed");
+      setSetting(SETTING_KEY_MINING_LOCK, "");
+      setSetting(
+        SETTING_KEY_MINING_LAST_RESULT,
+        JSON.stringify({
+          ran: res.ran,
+          reason: res.reason,
+          newNotesCount: res.newNotesCount,
+          savedTopicsCount: res.savedTopicsCount,
+          completedAt: completedIso,
+        }),
+      );
+    })
+    .catch((err) => {
+      console.error("[topics] async hourly mining error:", err);
+      const completedIso = new Date().toISOString();
+      setSetting(SETTING_KEY_LAST_SCANNED, completedIso);
+      setSetting(SETTING_KEY_MINING_STATUS, "failed");
+      setSetting(SETTING_KEY_MINING_LOCK, "");
+      setSetting(
+        SETTING_KEY_MINING_LAST_RESULT,
+        JSON.stringify({
+          ran: false,
+          error: err instanceof Error ? err.message : "选题生成异常中断",
+          completedAt: completedIso,
+        }),
+      );
+    });
+
+  return {
+    started: true,
+    message: "周期选题挖掘任务已在后台启动",
+    state: getTopicMiningState(),
   };
 }
 
@@ -291,7 +426,7 @@ export function saveTopicToRepository(
   item: Partial<TopicRepositoryItem> & { title: string },
 ): { topic: TopicRepositoryItem; created: boolean } {
   const db = getDb();
-  const cleanTitle = item.title.trim();
+  const cleanTitle = String(item.title || "").trim();
   if (!cleanTitle) {
     throw new Error("选题标题不能为空");
   }
@@ -549,8 +684,8 @@ async function runMiningOnce(
       ran: false,
       reason:
         newNotes.length > 0
-          ? "新收录笔记已在选题库中拥有待创作选题，跳过重复生成（0 Token 消耗）"
-          : "该周期内没有新收录的内容，跳过选题生成（0 Token 消耗）",
+          ? "新收录笔记在选题库中已有待写选题，暂无须重复生成"
+          : "当前周期内无新收录笔记，保持现有选题储备",
       newNotesCount: newNotes.length,
       savedTopicsCount: 0,
       topics: [],
@@ -621,11 +756,11 @@ async function runMiningOnce(
 
       const systemPrompt =
         topicAgent?.system_prompt ||
-        `你是选题总监与爆款内容策划专家。
+        `你是创作总监与深度内容策划专家。
 你的任务是专门针对创作者刚刚新收录的这批知识材料进行精益选题策划。
 
-严格遵循三大收敛原则（拒绝泛滥，注重精度与张力）：
-1. 【一笔记一黄金选题】：针对每一篇输入的新笔记，自动研判其最契合的单一平台属性（硬核技术/思辨选知乎，痛点实操/避坑选小红书，深度叙事/专栏选公众号，认知金句选X短文），每篇笔记只产出 1 个最精准的黄金选题，绝不在单篇笔记上泛滥发散；
+严格遵循三大收敛原则（拒绝泛滥，注重立论精度与张力）：
+1. 【一笔记一核心方案】：针对每一篇输入的新笔记，产出 1 个立论深刻、结构严谨的母稿选题方案；
 2. 【跨笔记交叉融合】：如果本次输入包含 2 篇及以上笔记，额外挑选 2 篇具有观点呼应、反常识张力或互为论据的笔记，合成 1 个【跨界融合大选题】；
 3. 【严格防重】：绝对不能与历史已有的选题库标题重复，必须产生新颖、具洞察力的全新切角；
 4. 严格输出 JSON 数组，不带任何思考或说明文字。`;
@@ -633,13 +768,12 @@ async function runMiningOnce(
       const userPrompt = [
         `【创作者刚刚收录的全新知识材料（共 ${unminedNotes.length} 篇）】：\n${noteMaterials}`,
         existingConstraint,
-        `\n请输出选题方案：对每篇资料出 1 个黄金选题（${unminedNotes.length} 个）${unminedNotes.length >= 2 ? " + 1 个跨资料交叉融合选题" : ""}，严格输出 JSON 格式如下：
+        `\n请输出选题方案：对每篇资料出 1 个母稿选题（${unminedNotes.length} 个）${unminedNotes.length >= 2 ? " + 1 个跨资料交叉融合选题" : ""}，严格输出 JSON 格式如下：
 [
   {
     "title": "爆款标题（极具吸引力且契合新材料，绝不与历史选题重复）",
     "angle": "核心论据切角与论证重点（1-2句）",
     "hook": "正文开头第一段的吸睛引子/冲突破题句",
-    "targetSkill": "wechat | xiaohongshu | zhihu | x_thread | master",
     "outline": [
       "一、章节/分点1",
       "二、章节/分点2",
@@ -656,7 +790,7 @@ async function runMiningOnce(
         prompt: userPrompt,
         temperature: topicAgent?.temperature || 0.85,
         maxRetries: 1,
-        abortSignal: AbortSignal.timeout(60_000),
+        abortSignal: AbortSignal.timeout(180_000),
       });
 
       const start = text.indexOf("[");
@@ -668,44 +802,33 @@ async function runMiningOnce(
       }
     } catch (err) {
       console.error("[topics] hourly topic mining LLM error:", err);
+      return {
+        ran: false,
+        reason: `大模型选题生成失败: ${err instanceof Error ? err.message : "请求超时或网络异常"}`,
+        newNotesCount: unminedNotes.length,
+        savedTopicsCount: 0,
+        topics: [],
+      };
     }
+  } else {
+    return {
+      ran: false,
+      reason: "请先在系统设置中配置大模型 API Key 后再触发选题生成",
+      newNotesCount: unminedNotes.length,
+      savedTopicsCount: 0,
+      topics: [],
+    };
   }
 
-  // 兜底方案（未配置 LLM 或 LLM 异常时）
+  // 严格杜绝模板兜底数据：如果模型未能产出有效方案，直接明确返回原因
   if (!Array.isArray(generatedRawTopics) || generatedRawTopics.length === 0) {
-    // 1 篇笔记产出 1 个专属选题
-    generatedRawTopics = unminedNotes.map((note, idx) => {
-      const title = note.title || `新知识沉淀 #${idx + 1}`;
-      return {
-        title: `从「${title}」看知识复利：如何把单篇输入转化为高密度爆款？`,
-        angle: `针对《${title}》的核心论点，剖析如何将单点认知转化为结构化表达。`,
-        hook: "每一条新加入知识库的笔记，都不该成为沉睡的数字资产，而是随时待命的作品零件。",
-        targetSkill: idx % 2 === 0 ? "wechat" : "zhihu",
-        outline: [
-          "一、新素材入库的第一刀：如何精准提纯核心主张",
-          "二、论证展开：从单点事实到逻辑闭环",
-          "三、闭环交付：多场景实践指南",
-        ],
-        materialIndices: [idx + 1],
-      };
-    });
-
-    // 若有多篇笔记，追加 1 个跨界融合选题
-    if (unminedNotes.length >= 2) {
-      generatedRawTopics.push({
-        title: `当「${unminedNotes[0].title || "技术"}」遇到「${unminedNotes[1].title || "认知"}」：跨界融合的底层逻辑`,
-        angle:
-          "把看似独立的两篇笔记观点进行跨领域张力碰撞，提炼出超越单一维度的洞察。",
-        hook: "创新的本质不是凭空造物，而是把不同领域的常识连接在一起，产生新的认知突破。",
-        targetSkill: "wechat",
-        outline: [
-          "一、两重维度的表象割裂与底层共通点",
-          "二、张力碰撞：交叉视角带来的认知跃迁",
-          "三、新范式落地：跨界融合的行动指南",
-        ],
-        materialIndices: [1, 2],
-      });
-    }
+    return {
+      ran: false,
+      reason: "大模型未返回有效的选题 JSON 结构",
+      newNotesCount: unminedNotes.length,
+      savedTopicsCount: 0,
+      topics: [],
+    };
   }
 
   // 6. 落库保存并排重
@@ -721,14 +844,7 @@ async function runMiningOnce(
       continue;
     }
 
-    const targetSkillRaw = String(raw.targetSkill ?? "");
-    const targetSkill = (
-      ["wechat", "xiaohongshu", "zhihu", "x_thread", "master"].includes(
-        targetSkillRaw,
-      )
-        ? targetSkillRaw
-        : "wechat"
-    ) as PlatformSkillId;
+    const targetSkill: PlatformSkillId = "master";
 
     const matIdxs: number[] = Array.isArray(raw.materialIndices)
       ? raw.materialIndices

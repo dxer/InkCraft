@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  checkAndMineHourlyTopics,
   getTopicStats,
   getTopicsFromDb,
   saveTopicToRepository,
+  triggerHourlyMiningAsync,
   type TopicFilterOptions,
 } from "@/lib/topics";
 
@@ -31,13 +31,11 @@ export async function GET(request: Request) {
 
   const stats = getTopicStats();
 
-  // 静默懒检查：如果离上次扫描已超过 1 小时，异步尝试增量分析（不阻塞本次返回）
+  // 静默懒检查：如果离上次扫描已超过 1 小时且当前未在运行，触发异步分析
   if (stats.lastScannedAt) {
     const elapsed = Date.now() - new Date(stats.lastScannedAt).getTime();
-    if (elapsed >= 60 * 60 * 1000) {
-      void checkAndMineHourlyTopics({ force: false }).catch((err) => {
-        console.error("[topics] background hourly mining failed:", err);
-      });
+    if (elapsed >= 60 * 60 * 1000 && !stats.miningState?.isMining) {
+      triggerHourlyMiningAsync({ force: false });
     }
   }
 
