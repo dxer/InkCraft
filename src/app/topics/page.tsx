@@ -106,8 +106,8 @@ export default function TopicsPage() {
 
   // 创作者自定义选中的备选标题字典：topicId -> selectedTitleIndex (0, 1, 2)
   const [selectedTitles, setSelectedTitles] = useState<Record<string, number>>({});
-  // 折叠大纲展开状态字典：topicId -> boolean
-  const [expandedOutlines, setExpandedOutlines] = useState<Record<string, boolean>>({});
+  // 选题卡片展开/收起详情字典：topicId -> boolean
+  const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
 
   const [pendingDelete, setPendingDelete] = useState<TopicRepositoryItem | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -503,14 +503,14 @@ export default function TopicsPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3.5">
           {sortedTopics.map((topic) => {
             const skillMeta =
               PLATFORM_SKILLS.find((s) => s.id === topic.targetSkill) || PLATFORM_SKILLS[0];
             const isUsed = topic.status === "used";
             const isArchived = topic.status === "archived";
             const selectedIdx = selectedTitles[topic.id] ?? 0;
-            const isOutlineOpen = expandedOutlines[topic.id] ?? false;
+            const isExpanded = expandedDetails[topic.id] ?? false;
 
             const angleTag =
               topic.angleType === "paradox"
@@ -523,16 +523,18 @@ export default function TopicsPage() {
               ? topic.titleOptions
               : [topic.title];
 
+            const currentDisplayTitle = titles[selectedIdx] || topic.title;
+
             return (
               <Card
                 key={topic.id}
                 className={cn(
-                  "group relative flex flex-col justify-between rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:border-primary/50 hover:shadow-md space-y-4",
+                  "group relative flex flex-col justify-between rounded-2xl border bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-primary/40 hover:shadow-sm space-y-3.5",
                   isUsed && "border-dashed bg-muted/20 opacity-85",
                   isArchived && "opacity-60 bg-muted/30",
                 )}
               >
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* 顶栏元数据 */}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -565,7 +567,7 @@ export default function TopicsPage() {
                         )}
                       </div>
 
-                      {/* 状态标签 */}
+                      {/* 状态切换标签 */}
                       <button
                         type="button"
                         onClick={() =>
@@ -588,147 +590,139 @@ export default function TopicsPage() {
                     </div>
                   </div>
 
-                  {/* 核心立论机制（严格2句话） */}
-                  <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 text-xs text-foreground/90 leading-relaxed space-y-1">
-                    <div className="flex items-center gap-1.5 font-semibold text-primary text-[11px]">
-                      <Zap className="size-3.5" />
-                      全篇核心论点与底层机制：
-                    </div>
-                    <p className="font-medium text-xs leading-relaxed text-foreground">
+                  {/* 核心主标题（折叠态直接展示当前选中的主标题） */}
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-sm sm:text-base font-bold text-foreground leading-snug break-words flex-1">
+                      {currentDisplayTitle}
+                    </h3>
+                  </div>
+
+                  {/* 折叠模式下的一句话切角预览 */}
+                  {!isExpanded && (topic.coreArgument || topic.angle) && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                      <span className="font-medium text-foreground/80">核心论点：</span>
                       {topic.coreArgument || topic.angle}
                     </p>
-                  </div>
-
-                  {/* 3 选 1 多风格标题矩阵（创作者即时点选采纳） */}
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
-                      <span>备选标题矩阵（点击单选框即采纳为主标题）：</span>
-                      <span className="text-[10px] text-muted-foreground/70">
-                        {titles.length} 种风格可选
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {titles.map((titleOpt, tIdx) => {
-                        const isChosen = selectedIdx === tIdx;
-                        return (
-                          <div
-                            key={tIdx}
-                            onClick={() =>
-                              setSelectedTitles((prev) => ({
-                                ...prev,
-                                [topic.id]: tIdx,
-                              }))
-                            }
-                            className={cn(
-                              "flex items-start gap-2.5 rounded-xl border p-2.5 transition-all cursor-pointer text-xs",
-                              isChosen
-                                ? "border-primary bg-primary/5 text-foreground font-semibold shadow-2xs"
-                                : "border-border/60 bg-card/60 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name={`title_${topic.id}`}
-                              checked={isChosen}
-                              onChange={() => {}}
-                              className="mt-0.5 size-3.5 text-primary accent-primary cursor-pointer shrink-0"
-                            />
-                            <span className="leading-snug break-words flex-1">
-                              {titleOpt}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* 绑定的知识卡片资产 */}
-                  {topic.matchedCards && topic.matchedCards.length > 0 && (
-                    <div className="pt-2 border-t border-border/40 space-y-1.5">
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <IdCard className="size-3 text-primary" />
-                        <span>灵感引用的原子卡片资产 ({topic.matchedCards.length} 张)：</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {topic.matchedCards.map((card, cIdx) => (
-                          <span
-                            key={cIdx}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-secondary/80 border border-border/60 px-2.5 py-1 text-[11px] text-foreground font-medium"
-                            title={card.claim}
-                          >
-                            <span className="size-1.5 rounded-full bg-primary" />
-                            {card.noteTitle ? `《${card.noteTitle}》` : card.claim}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
                   )}
 
-                  {/* 折叠/展开结构化大纲 */}
-                  {((topic.outlineStructured && topic.outlineStructured.length > 0) ||
-                    (topic.outline && topic.outline.length > 0)) && (
-                    <div className="pt-2 border-t border-border/40 space-y-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedOutlines((prev) => ({
-                            ...prev,
-                            [topic.id]: !isOutlineOpen,
-                          }))
-                        }
-                        className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                      >
-                        {isOutlineOpen ? (
-                          <>
-                            <ChevronUp className="size-3.5" />
-                            <span>收起成文大纲</span>
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="size-3.5" />
-                            <span>
-                              展开大纲结构 (
-                              {topic.outlineStructured?.length ||
-                                topic.outline?.length ||
-                                4}{" "}
-                              段)
-                            </span>
-                          </>
-                        )}
-                      </button>
+                  {/* 展开态详细内容：全篇机制 + 3选1标题矩阵 + 绑定卡片 + 结构大纲 */}
+                  {isExpanded && (
+                    <div className="space-y-3.5 pt-1 animate-in fade-in-0 duration-150">
+                      {/* 全篇底层机制 */}
+                      <div className="rounded-xl border border-border/80 bg-muted/30 p-3 text-xs text-foreground/90 leading-relaxed space-y-1">
+                        <div className="flex items-center gap-1.5 font-semibold text-primary text-[11px]">
+                          <Zap className="size-3.5" />
+                          <span>底层论述机制与破题逻辑：</span>
+                        </div>
+                        <p className="font-medium text-xs leading-relaxed text-foreground">
+                          {topic.coreArgument || topic.angle}
+                        </p>
+                      </div>
 
-                      {isOutlineOpen && (
-                        <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 space-y-2.5 text-xs animate-in fade-in-0 duration-100">
-                          {topic.outlineStructured && topic.outlineStructured.length > 0 ? (
-                            <div className="space-y-2">
-                              {topic.outlineStructured.map((step, sIdx) => (
-                                <div key={sIdx} className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-foreground">
-                                      {step.step}
-                                    </span>
-                                    {step.referencedCardId && (
-                                      <span className="rounded bg-primary/10 text-primary px-1.5 py-0.2 text-[10px] font-mono">
-                                        🔗 锚定卡片: {step.referencedCardTitle || step.referencedCardId.slice(0, 8)}
+                      {/* 3 选 1 多风格标题矩阵 */}
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
+                          <span>多风格标题矩阵（点选即采纳为成文标题）：</span>
+                          <span className="text-[10px] text-muted-foreground/70">
+                            {titles.length} 种风格
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {titles.map((titleOpt, tIdx) => {
+                            const isChosen = selectedIdx === tIdx;
+                            return (
+                              <div
+                                key={tIdx}
+                                onClick={() =>
+                                  setSelectedTitles((prev) => ({
+                                    ...prev,
+                                    [topic.id]: tIdx,
+                                  }))
+                                }
+                                className={cn(
+                                  "flex items-start gap-2.5 rounded-xl border p-2.5 transition-all cursor-pointer text-xs",
+                                  isChosen
+                                    ? "border-primary bg-primary/5 text-foreground font-semibold shadow-2xs"
+                                    : "border-border/60 bg-card/60 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                                )}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`title_${topic.id}`}
+                                  checked={isChosen}
+                                  onChange={() => {}}
+                                  className="mt-0.5 size-3.5 text-primary accent-primary cursor-pointer shrink-0"
+                                />
+                                <span className="leading-snug break-words flex-1">
+                                  {titleOpt}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 绑定的知识卡片资产 */}
+                      {topic.matchedCards && topic.matchedCards.length > 0 && (
+                        <div className="pt-2 border-t border-border/40 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <IdCard className="size-3 text-primary" />
+                            <span>引用的原子知识卡片 ({topic.matchedCards.length} 张)：</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {topic.matchedCards.map((card, cIdx) => (
+                              <span
+                                key={cIdx}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-secondary/80 border border-border/60 px-2 py-0.5 text-[11px] text-foreground font-medium"
+                                title={card.claim}
+                              >
+                                <span className="size-1.5 rounded-full bg-primary" />
+                                {card.noteTitle ? `《${card.noteTitle}》` : card.claim}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 结构化递进大纲 */}
+                      {((topic.outlineStructured && topic.outlineStructured.length > 0) ||
+                        (topic.outline && topic.outline.length > 0)) && (
+                        <div className="pt-2 border-t border-border/40 space-y-2">
+                          <div className="text-[11px] font-semibold text-muted-foreground">
+                            成文递进大纲 ({topic.outlineStructured?.length || topic.outline?.length || 4} 段)：
+                          </div>
+                          <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2 text-xs">
+                            {topic.outlineStructured && topic.outlineStructured.length > 0 ? (
+                              <div className="space-y-2">
+                                {topic.outlineStructured.map((step, sIdx) => (
+                                  <div key={sIdx} className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-foreground text-[11px]">
+                                        {step.step}
                                       </span>
-                                    )}
+                                      {step.referencedCardId && (
+                                        <span className="rounded bg-primary/10 text-primary px-1.5 py-0.2 text-[10px] font-mono">
+                                          锚定卡片: {step.referencedCardTitle || step.referencedCardId.slice(0, 8)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed pl-2.5 border-l border-primary/30">
+                                      {step.guideline}
+                                    </p>
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground leading-relaxed pl-3 border-l border-primary/30">
-                                    {step.guideline}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <ul className="space-y-1.5 text-xs text-muted-foreground list-disc list-inside">
-                              {topic.outline?.map((item, idx) => (
-                                <li key={idx} className="leading-snug">
-                                  {item}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                                ))}
+                              </div>
+                            ) : (
+                              <ul className="space-y-1 text-xs text-muted-foreground list-disc list-inside">
+                                {topic.outline?.map((item, idx) => (
+                                  <li key={idx} className="leading-snug">
+                                    {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -736,26 +730,55 @@ export default function TopicsPage() {
                 </div>
 
                 {/* 卡片底栏操作 */}
-                <div className="pt-3 border-t border-border/40 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1 font-mono text-[11px]">
-                    <Clock className="size-3" />
-                    <span>
-                      {topic.createdAt
-                        ? new Date(topic.createdAt).toLocaleDateString("zh-CN")
-                        : ""}
-                    </span>
+                <div className="pt-2.5 border-t border-border/40 flex flex-wrap items-center justify-between gap-2.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    {/* 折叠/展开详情按钮 */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setExpandedDetails((prev) => ({
+                          ...prev,
+                          [topic.id]: !isExpanded,
+                        }))
+                      }
+                      className="h-7 px-2 text-xs text-primary hover:bg-primary/10 rounded-md font-medium cursor-pointer gap-1"
+                    >
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp className="size-3.5" />
+                          <span>收起详情</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="size-3.5" />
+                          <span>
+                            展开详情 ({titles.length} 标题 / 大纲)
+                          </span>
+                        </>
+                      )}
+                    </Button>
+
+                    <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground/80">
+                      <Clock className="size-3" />
+                      <span>
+                        {topic.createdAt
+                          ? new Date(topic.createdAt).toLocaleDateString("zh-CN")
+                          : ""}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {topic.usedProjectId && (
                       <Button
                         variant="outline"
                         size="sm"
                         asChild
-                        className="h-8 px-2.5 text-xs rounded-lg font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer"
+                        className="h-7 px-2 text-xs rounded-md font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10 cursor-pointer"
                       >
                         <Link href={`/works/${topic.usedProjectId}`}>
-                          <FileText className="size-3.5 mr-1" />
+                          <FileText className="size-3 mr-1" />
                           <span>产出作品</span>
                         </Link>
                       </Button>
@@ -765,7 +788,7 @@ export default function TopicsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleUpdateStatus(topic, "archived")}
-                      className="h-8 px-2 text-xs rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="h-7 px-2 text-xs rounded-md text-muted-foreground hover:text-foreground cursor-pointer"
                       title="淘汰该选题，不再主动推荐"
                     >
                       <span>不感兴趣</span>
@@ -775,10 +798,10 @@ export default function TopicsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setPendingDelete(topic)}
-                      className="h-8 px-2 text-xs rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                      className="h-7 px-2 text-xs rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                       title="彻底删除该选题"
                     >
-                      <Trash2 className="size-3.5 mr-1" />
+                      <Trash2 className="size-3 mr-1" />
                       <span>删除</span>
                     </Button>
 
@@ -786,15 +809,15 @@ export default function TopicsPage() {
                       size="sm"
                       onClick={() => handleCreateWithTopic(topic)}
                       disabled={navigatingId === topic.id}
-                      className="h-8 px-3.5 rounded-lg text-xs font-semibold gap-1.5 cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                      className="h-7.5 px-3 rounded-lg text-xs font-semibold gap-1 cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                       {navigatingId === topic.id ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : (
                         <>
-                          <PenLine className="size-3.5" />
+                          <PenLine className="size-3" />
                           <span>以此开写</span>
-                          <ArrowRight className="size-3.5" />
+                          <ArrowRight className="size-3" />
                         </>
                       )}
                     </Button>

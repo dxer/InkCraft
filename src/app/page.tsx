@@ -9,7 +9,9 @@ import {
   Copy,
   Download,
   Edit3,
+  ExternalLink,
   FolderInput,
+  Globe,
   Inbox,
   Link2,
   ListChecks,
@@ -621,6 +623,30 @@ function HomeNoteCard({
               </span>
             ) : null;
           })()}
+
+          {note.sourceUrl && (
+            <a
+              href={note.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:bg-blue-500/20"
+              title={`打开原文：${note.sourceUrl}`}
+            >
+              <Globe className="size-2.5 shrink-0" />
+              <span className="truncate max-w-32">
+                {(() => {
+                  try {
+                    return new URL(note.sourceUrl).hostname.replace(/^www\./, "");
+                  } catch {
+                    return "原文";
+                  }
+                })()}
+              </span>
+              <ExternalLink className="size-2 shrink-0 opacity-70" />
+            </a>
+          )}
+
           {(note.tags || []).map((t) => (
             <span
               key={t}

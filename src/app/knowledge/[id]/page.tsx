@@ -4,11 +4,13 @@ import {
   ArrowDownUp,
   Check,
   ChevronDown,
+  ExternalLink,
   FileCode,
   FileText,
   Folder,
   FolderPlus,
   FolderInput,
+  Globe,
   IdCard,
   Link2,
   ListChecks,
@@ -1270,7 +1272,7 @@ export default function KnowledgeDetailPage() {
                   className="min-h-0 resize-none overflow-hidden border-0 rounded-md p-0 py-1 text-2xl sm:text-[28px] md:text-[28px] font-bold tracking-tight shadow-none focus-visible:ring-0 h-auto leading-snug text-foreground placeholder:text-muted-foreground/35"
                 />
 
-                {/* 标签栏 */}
+                {/* 标签栏与来源追溯 */}
                 <div className="relative flex flex-wrap items-center gap-1.5 text-xs">
                   <Badge
                     variant="outline"
@@ -1279,6 +1281,29 @@ export default function KnowledgeDetailPage() {
                     <Tag className="size-2.5" />
                     {kb?.name}
                   </Badge>
+
+                  {/* 原文地址追溯徽章 */}
+                  {selectedNote.sourceUrl && (
+                    <a
+                      href={selectedNote.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-blue-500/20"
+                      title={`在新标签页打开原文：${selectedNote.sourceUrl}`}
+                    >
+                      <Globe className="size-3 shrink-0" />
+                      <span className="truncate max-w-44">
+                        {(() => {
+                          try {
+                            return new URL(selectedNote.sourceUrl).hostname.replace(/^www\./, "");
+                          } catch {
+                            return "原文地址";
+                          }
+                        })()}
+                      </span>
+                      <ExternalLink className="size-2.5 shrink-0 opacity-70" />
+                    </a>
+                  )}
 
                   {/* 笔记现有标签（无前缀#，hover时显现删除叉号） */}
                   {(selectedNote.tags || []).map((t) => (
