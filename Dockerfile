@@ -18,7 +18,7 @@ RUN apk add --no-cache python3 make g++ gcc
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
 RUN pnpm install --frozen-lockfile
 
-# 3. 生产打包构建
+# 3. 生产打包构建（输出 Standalone 独立最小运行时）
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -26,10 +26,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 RUN pnpm build
 
-# 4. 生产运行阶段
-FROM base AS runner
-# 安装运行时工具（ca 证书、时区支持、curl 用于容器健康检查）
-RUN apk add --no-cache ca-certificates tzdata curl
+# 4. 生产运行阶段（仅包含 Node 运行时与 Standalone 极简产物）
+FROM node:22-alpine AS runner
+# 安装运行时工具（ca 证书、时区支持、curl 用于容器健康检查、libc6 兼容层）
+RUN apk add --no-cache ca-certificates tzdata curl libc6-compat
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -42,14 +42,10 @@ ENV TZ="Asia/Shanghai"
 RUN mkdir -p /app/data && \
     chown -R node:node /app/data
 
-# 复制生产运行所需的构建物与依赖
-COPY --from=builder --chown=node:node /app/package.json ./package.json
-COPY --from=builder --chown=node:node /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=builder --chown=node:node /app/pnpm-workspace.yaml* ./pnpm-workspace.yaml
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
-COPY --from=builder --chown=node:node /app/.next ./.next
+# 复制 Next.js Standalone 最小独立产物与静态资源
 COPY --from=builder --chown=node:node /app/public ./public
-COPY --from=builder --chown=node:node /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 # 切换为安全非 root 用户
 USER node
@@ -59,8 +55,8 @@ EXPOSE 3000
 # SQLite 数据库持久化目录
 VOLUME ["/app/data"]
 
-# 容器健康检查（/login 为免鉴权公开路径；/api/settings 在门禁开启后返回 401，会导致永远 unhealthy）
+# 容器健康检查（/login 为免鉴权公开路径）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3000/login || exit 1
 
-CMD ["pnpm", "start"]
+CMD ["node", "server.js"]

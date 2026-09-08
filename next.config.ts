@@ -8,6 +8,7 @@ const devOriginsFromEnv = (process.env.ALLOWED_DEV_ORIGINS || "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   // better-sqlite3 是原生模块，必须排除出打包流程，运行时直接 require
   serverExternalPackages: ["better-sqlite3"],
   allowedDevOrigins: devOriginsFromEnv,
