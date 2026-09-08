@@ -5,10 +5,33 @@
  * - 仅 Node 运行时注册；构建阶段与 Edge 运行时直接跳过。
  */
 export async function register() {
- if (process.env.NEXT_RUNTIME !== "nodejs") return;
- if (process.env.NEXT_PHASE === "phase-production-build") return;
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
 
- // SAFETY: 单进程幂等注册标志——我们在本进程 globalThis 上只写这一次，断言只读回自己写的字段
+  // 补齐 Node.js 服务端缺少浏览器 DOMMatrix 全局对象的兼容层（避免 pdfjs-dist / canvas 评估报错）
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    class DOMMatrixPolyfill {
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+      m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+      m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+      m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+      is2D = true;
+      isIdentity = true;
+      constructor(init?: unknown) {
+        if (Array.isArray(init) && init.length >= 6) {
+          [this.a, this.b, this.c, this.d, this.e, this.f] = init;
+          this.m11 = this.a; this.m12 = this.b;
+          this.m21 = this.c; this.m22 = this.d;
+          this.m41 = this.e; this.m42 = this.f;
+        }
+      }
+    }
+    // @ts-expect-error polyfill for Node.js runtime
+    globalThis.DOMMatrix = DOMMatrixPolyfill;
+  }
+
+  // SAFETY: 单进程幂等注册标志——我们在本进程 globalThis 上只写这一次，断言只读回自己写的字段
  const g = globalThis as {
   __inkcraftMiningTicker?: ReturnType<typeof setInterval> | null;
  };

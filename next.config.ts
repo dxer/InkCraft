@@ -9,8 +9,8 @@ const devOriginsFromEnv = (process.env.ALLOWED_DEV_ORIGINS || "")
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // better-sqlite3 是原生模块，必须排除出打包流程，运行时直接 require
-  serverExternalPackages: ["better-sqlite3"],
+  // better-sqlite3 是原生模块，pdf-parse / pdfjs-dist 在 Node 服务端执行，排除出 Turbopack 打包流程
+  serverExternalPackages: ["better-sqlite3", "pdf-parse", "pdfjs-dist"],
   allowedDevOrigins: devOriginsFromEnv,
 };
 
