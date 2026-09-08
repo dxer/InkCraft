@@ -47,9 +47,14 @@ export async function DELETE(_request: Request, { params }: Params) {
   }
 
   const db = getDb();
-  // 将该知识库下的笔记迁移回默认知识库
-  db.prepare("UPDATE knowledge_items SET kb_id = 'default' WHERE kb_id = ?").run(id);
-  const res = db.prepare("DELETE FROM knowledge_bases WHERE id = ?").run(id);
+  // 事务中将该知识库下的内容（笔记与切片、历史文档）平滑迁移回默认知识库
+  const deleteTx = db.transaction((targetId: string) => {
+    db.prepare("UPDATE knowledge_items SET kb_id = 'default' WHERE kb_id = ?").run(targetId);
+    db.prepare("UPDATE documents SET kb_id = 'default' WHERE kb_id = ?").run(targetId);
+    return db.prepare("DELETE FROM knowledge_bases WHERE id = ?").run(targetId);
+  });
+
+  const res = deleteTx(id);
 
   if (res.changes === 0) {
     return NextResponse.json({ error: "知识库不存在" }, { status: 404 });

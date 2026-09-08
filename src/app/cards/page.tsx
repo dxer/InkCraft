@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import {
   Dialog,
   DialogContent,
@@ -196,13 +196,13 @@ export default function CardsPage() {
             <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <IdCard className="size-4" />
             </span>
-            知识卡片库
+            知识卡片
             <span className="text-xs font-normal text-muted-foreground">
-              Permanent Notes Gallery
+              Knowledge Cards
             </span>
           </h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            基于卢曼卡片盒与自媒体传播学：自洽原子命题 · 痛点切入 Hook · 知识网络拓扑。
+            沉淀自洽论点、亮眼金句与关键事实，随时调取用于写作。
           </p>
         </div>
 
@@ -877,11 +877,11 @@ function WriteWithCardDialog({
   );
 }
 
-/** 卡片字段 markdown 渲染：与编辑器预览同源（marked） */
+/** 卡片字段 markdown 渲染：与编辑器预览同源（marked + DOMPurify 消毒） */
 function MdText({ text, className }: { text: string; className?: string }) {
   const html = useMemo(() => {
     try {
-      return marked.parse(text || "", { gfm: true, breaks: true }) as string;
+      return renderMarkdown(text || "");
     } catch {
       return text;
     }

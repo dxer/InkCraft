@@ -16,17 +16,23 @@ const sseSessions = new Map<
 >();
 
 // 定期清理超过 2 小时的陈旧 SSE 会话
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, session] of sseSessions.entries()) {
-    if (now - session.createdAt > 2 * 60 * 60 * 1000) {
-      try {
-        session.controller.close();
-      } catch {}
-      sseSessions.delete(id);
+// SAFETY: globalThis 幂等守卫——dev 模式 HMR 反复执行本模块会积累多个 interval，
+// 生产单次加载无影响，与 instrumentation.ts 的注册守卫同一模式
+const g = globalThis as { __inkcraftMcpSweeper?: boolean };
+if (!g.__inkcraftMcpSweeper) {
+  g.__inkcraftMcpSweeper = true;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of sseSessions.entries()) {
+      if (now - session.createdAt > 2 * 60 * 60 * 1000) {
+        try {
+          session.controller.close();
+        } catch {}
+        sseSessions.delete(id);
+      }
     }
-  }
-}, 60000);
+  }, 60000);
+}
 
 /** 从 Request 中提取并校验 API Key */
 function authenticateRequest(req: Request): { valid: boolean; name?: string; keyId?: string } {

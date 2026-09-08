@@ -1,16 +1,18 @@
 # ============================================================
-# 墨匠 (InkCraft) - 默认部署配置：拉取 GitHub 官方预编译镜像
+# 墨匠 (InkCraft) - 本地编译部署配置：从源码构建镜像
 # ------------------------------------------------------------
-# 适合绝大多数用户：无需本地构建，直接拉取 ghcr.io 上的镜像运行。
-# 想本地编译源码（开发/自定义）请改用：
-#   docker compose -f docker-compose.build.yml up -d --build
+# 用法：docker compose -f docker-compose.build.yml up -d --build
+# 适合开发调试或改完源码自用；多数用户请直接用默认的 docker-compose.yml
+# （拉取 ghcr.io/dxer/inkcraft 预编译镜像，无需本地构建）。
 # 两个文件共用同一个具名卷 inkcraft_sqlite_data，随时互换数据不丢。
 # ============================================================
 
 services:
   inkcraft:
-    # 追踪 main 分支最新构建；也可固定到某次提交，如 ghcr.io/dxer/inkcraft:sha-63b92f2
-    image: ghcr.io/dxer/inkcraft:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: inkcraft:local
     container_name: inkcraft
     restart: unless-stopped
     stop_grace_period: 15s

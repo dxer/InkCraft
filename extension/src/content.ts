@@ -1,7 +1,7 @@
 import { Readability } from "@mozilla/readability";
 import TurndownService from "@joplin/turndown";
 import { gfm } from "@joplin/turndown-plugin-gfm";
-import { loadConfig, saveClip } from "./lib/api";
+import { listKnowledgeBases, loadConfig, saveClip, saveConfig } from "./lib/api";
 import { dropLeadingTitleHeading, markdownToHtml } from "./lib/markdown";
 import { fetchFxTweet, fxTweetToMarkdown, parseStatusUrl } from "./lib/x-tweet";
 
@@ -664,6 +664,13 @@ function openRegionPanel(el: Element): void {
       .brand { font-weight: 600; font-size: 13px; }
       .close { border: none; background: none; cursor: pointer; color: #737373; font-size: 16px; padding: 2px 6px; border-radius: 6px; }
       .close:hover { background: #f0f0f0; color: #171717; }
+      .kb-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 11px; }
+      .kb-label { color: #737373; white-space: nowrap; }
+      .kb-select {
+        flex: 1; border: 1px solid #e5e5e5; border-radius: 6px; background: #fafafa;
+        font-size: 11px; padding: 4px 6px; color: #171717; outline: none; cursor: pointer;
+      }
+      .kb-select:focus { border-color: #171717; }
       input[type="text"], textarea {
         width: 100%; box-sizing: border-box; border: 1px solid #e5e5e5; border-radius: 8px;
         font: inherit; color: inherit; outline: none; background: #fafafa; padding: 7px 9px;
@@ -717,6 +724,12 @@ function openRegionPanel(el: Element): void {
         <span class="brand">墨匠 · 区域剪藏</span>
         <button class="close" data-act="close" title="关闭">✕</button>
       </div>
+      <div class="kb-row">
+        <label class="kb-label">保存到：</label>
+        <select data-el="kb" class="kb-select">
+          <option value="">默认知识库</option>
+        </select>
+      </div>
       <input type="text" data-el="title" value="" placeholder="标题" />
       <div class="tabs">
         <button class="t active" data-view="preview">预览</button>
@@ -738,6 +751,7 @@ function openRegionPanel(el: Element): void {
   `;
 
   const $ = <T extends HTMLElement>(sel: string) => shadow.querySelector(sel) as T;
+  const kbSelect = $<HTMLSelectElement>('[data-el="kb"]');
   const titleInput = $<HTMLInputElement>('[data-el="title"]');
   const contentBox = $<HTMLTextAreaElement>('[data-el="content"]');
   const rendered = $<HTMLElement>('[data-el="rendered"]');
@@ -750,6 +764,31 @@ function openRegionPanel(el: Element): void {
   rendered.innerHTML = markdownToHtml(markdown);
   const syncCount = () => (count.textContent = `${contentBox.value.length} 字`);
   syncCount();
+
+  // 异步获取知识库列表并初始化选中项
+  (async () => {
+    try {
+      const cfg = await loadConfig();
+      if (cfg.serverUrl && cfg.apiKey) {
+        const kbRes = await listKnowledgeBases(cfg);
+        if (kbRes.ok && kbRes.kbs?.length) {
+          kbSelect.innerHTML = kbRes.kbs
+            .map(
+              (k) =>
+                `<option value="${k.id}" ${k.id === (cfg.kbId || "") ? "selected" : ""}>${k.name}${k.isDefault ? " (默认)" : ""}</option>`
+            )
+            .join("");
+        }
+      }
+    } catch {}
+  })();
+
+  kbSelect.addEventListener("change", async () => {
+    try {
+      const cfg = await loadConfig();
+      await saveConfig({ ...cfg, kbId: kbSelect.value });
+    } catch {}
+  });
 
   const tabs = shadow.querySelectorAll('[data-view]');
   tabs.forEach((tab) =>
@@ -793,18 +832,27 @@ function openRegionPanel(el: Element): void {
           saveBtn.disabled = false;
           return;
         }
-        const note = await saveClip(config, {
-          ok: true,
-          mode: "region",
-          title: titleInput.value.trim() || "区域剪藏",
-          content,
-          excerpt: content.slice(0, 120),
-          byline: null,
-          sourceUrl: location.href,
-          wordCount: content.length,
-        });
-        show("ok", `✓ 已保存「${note.title || "未命名笔记"}」· <a href="${config.serverUrl}/knowledge/default?note=${note.id}" target="_blank">在墨匠中查看</a>`);
+        const targetKbId = kbSelect.value || config.kbId || "";
+        const note = await saveClip(
+          { ...config, kbId: targetKbId },
+          {
+            ok: true,
+            mode: "region",
+            title: titleInput.value.trim() || "区域剪藏",
+            content,
+            excerpt: content.slice(0, 120),
+            byline: null,
+            sourceUrl: location.href,
+            wordCount: content.length,
+          }
+        );
+        show(
+          "ok",
+          `✓ 已保存「${note.title || "未命名笔记"}」· <a href="${config.serverUrl}/knowledge/${note.kbId || "default"}?note=${note.id}" target="_blank">在墨匠中查看</a>`
+        );
         saveBtn.textContent = "已保存";
+        // 记住本次选择
+        await saveConfig({ ...config, kbId: targetKbId });
         setTimeout(closeRegionPanel, 6000);
       } catch (err) {
         show("err", err instanceof Error ? err.message : "保存失败");

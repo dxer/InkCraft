@@ -176,27 +176,33 @@ export default function KnowledgeDetailPage() {
         const nData = await notesRes.json();
         const loadedNotes: NoteItem[] = nData.notes || [];
         setNotes(loadedNotes);
-        if (loadedNotes.length > 0 && !selectedNote) {
-          let target = loadedNotes[0];
-          if (!noteParamConsumedRef.current) {
-            noteParamConsumedRef.current = true;
-            const noteParam = new URLSearchParams(window.location.search).get(
-              "note",
-            );
-            const matched = noteParam
-              ? loadedNotes.find((n) => n.id === noteParam)
-              : null;
-            if (matched) target = matched;
-          }
-          setSelectedNote(target);
-          setEditingTitle(target.title || "");
-          setEditingContent(target.content || "");
+        if (loadedNotes.length > 0) {
+          setSelectedNote((current) => {
+            if (current) {
+              const updated = loadedNotes.find((n) => n.id === current.id);
+              return updated || current;
+            }
+            let target = loadedNotes[0];
+            if (!noteParamConsumedRef.current) {
+              noteParamConsumedRef.current = true;
+              const noteParam = new URLSearchParams(window.location.search).get(
+                "note",
+              );
+              const matched = noteParam
+                ? loadedNotes.find((n) => n.id === noteParam)
+                : null;
+              if (matched) target = matched;
+            }
+            setEditingTitle(target.title || "");
+            setEditingContent(target.content || "");
+            return target;
+          });
         }
       }
     } finally {
       setLoading(false);
     }
-  }, [kbId, selectedNote]);
+  }, [kbId]);
 
   useEffect(() => {
     fetchKbAndNotes();
@@ -1532,7 +1538,7 @@ export default function KnowledgeDetailPage() {
                     }`}
                   >
                     <Sparkles className="size-3" />
-                    智鉴
+                    智鉴 · 灵感发散
                   </button>
 
                   {/* 生成 / 重新生成知识卡片 */}

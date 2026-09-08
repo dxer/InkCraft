@@ -9,9 +9,7 @@ import {
   Copy,
   Download,
   Edit3,
-  ExternalLink,
   FolderInput,
-  Globe,
   Inbox,
   Link2,
   ListChecks,
@@ -25,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,10 +32,6 @@ import { MoveNotesDialog } from "./knowledge/move-notes-dialog";
 import { ImportDialog } from "./knowledge/import-dialog";
 import { LinkDialog } from "./knowledge/link-dialog";
 import type { KnowledgeBase, NoteItem, NotesResponse } from "@/lib/types";
-
-function subscribeNoop() {
-  return () => {};
-}
 
 export default function HomePage() {
   const router = useRouter();
@@ -227,7 +221,7 @@ export default function HomePage() {
               void submitQuickNote();
             }
           }}
-          placeholder={`记录现在的想法... 支持 Markdown 语法，按 ${modKey} + Enter 秒级入库`}
+          placeholder={`记录现在的想法... 支持 Markdown 语法，按 ${modKey} + Enter 快速保存`}
           className="min-h-20 sm:min-h-24 resize-y border-0 p-0 shadow-none focus-visible:ring-0 text-sm leading-relaxed placeholder:text-muted-foreground/70"
         />
 
@@ -236,7 +230,7 @@ export default function HomePage() {
             <kbd className="inline-flex items-center gap-0.5 rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px]">
               {modKey} + ↵
             </kbd>
-            <span className="hidden sm:inline">快捷入库</span>
+            <span className="hidden sm:inline">快捷保存</span>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -254,7 +248,7 @@ export default function HomePage() {
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
                 <>
-                  <span>入库</span>
+                  <span>保存</span>
                   <Send className="size-3" />
                 </>
               )}
@@ -277,7 +271,7 @@ export default function HomePage() {
             </div>
             <div>
               <div className="text-xs font-semibold text-foreground">网页链接剪藏</div>
-              <div className="text-[11px] text-muted-foreground">AI 智能提取正文与分块</div>
+              <div className="text-[11px] text-muted-foreground">AI 智能提取正文并保存</div>
             </div>
           </button>
 
@@ -496,7 +490,7 @@ export default function HomePage() {
             disabled={sendingToWorkshop}
           >
             <Zap className="size-3.5" />
-            <span>送入工坊</span>
+            <span>以此素材开始写作</span>
             <ArrowRight className="size-3.5 hidden sm:inline" />
           </Button>
           <Button
@@ -592,7 +586,7 @@ function HomeNoteCard({
         <div
           onClick={(e) => e.stopPropagation()}
           className="flex items-center"
-          title={selected ? "取消勾选" : "勾选送入工坊"}
+          title={selected ? "取消勾选" : "勾选以开始写作"}
         >
           <Checkbox
             checked={selected}
@@ -623,29 +617,6 @@ function HomeNoteCard({
               </span>
             ) : null;
           })()}
-
-          {note.sourceUrl && (
-            <a
-              href={note.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium transition-colors hover:bg-blue-500/20"
-              title={`打开原文：${note.sourceUrl}`}
-            >
-              <Globe className="size-2.5 shrink-0" />
-              <span className="truncate max-w-32">
-                {(() => {
-                  try {
-                    return new URL(note.sourceUrl).hostname.replace(/^www\./, "");
-                  } catch {
-                    return "原文";
-                  }
-                })()}
-              </span>
-              <ExternalLink className="size-2 shrink-0 opacity-70" />
-            </a>
-          )}
 
           {(note.tags || []).map((t) => (
             <span

@@ -54,7 +54,7 @@ export default function TagsPage() {
       <header>
         <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
           <Tag className="size-5 text-muted-foreground" />
-          标签
+          标签索引
           <span className="text-sm font-normal text-muted-foreground">
             Tags & Topics
           </span>

@@ -59,8 +59,8 @@ EXPOSE 3000
 # SQLite 数据库持久化目录
 VOLUME ["/app/data"]
 
-# 容器健康检查
+# 容器健康检查（/login 为免鉴权公开路径；/api/settings 在门禁开启后返回 401，会导致永远 unhealthy）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:3000/api/settings || exit 1
+  CMD curl -f http://localhost:3000/login || exit 1
 
 CMD ["pnpm", "start"]

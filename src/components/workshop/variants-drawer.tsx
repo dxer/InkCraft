@@ -16,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,6 @@ import {
 import { PLATFORM_SKILLS, type PlatformSkillId } from "@/lib/types";
 import { copyWeChatRichText } from "@/lib/wechat-format";
 import { cn } from "@/lib/utils";
-import { AiCoverDialog } from "./ai-cover-dialog";
 
 const PLATFORMS = [
   { id: "wechat", name: "微信公众号", badge: "深度叙事", icon: MessageSquare, color: "text-emerald-500" },
@@ -62,7 +61,6 @@ export function VariantsDrawer({
   const [adapting, setAdapting] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [wechatCopied, setWechatCopied] = useState(false);
-  const [coverOpen, setCoverOpen] = useState(false);
 
   async function generateVariant(platformId: string) {
     if (!canvasContent.trim() || adapting) return;
@@ -259,21 +257,12 @@ export function VariantsDrawer({
               {/* 渲染预览 */}
               <div
                 className="prose prose-sm dark:prose-invert max-w-none leading-relaxed font-sans"
-                dangerouslySetInnerHTML={{ __html: marked(currentContent) as string }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(currentContent) }}
               />
             </div>
           )}
         </div>
       </DialogContent>
-
-      {/* AI 动态生成微信公众号 SVG 封面对话框 */}
-      <AiCoverDialog
-        open={coverOpen}
-        onOpenChange={setCoverOpen}
-        title={variants.wechat ? variants.wechat.replace(/^[#>*_\-\s]+/gm, "").slice(0, 40) : "公众号精选专栏"}
-        summary={currentContent.slice(0, 200)}
-        category="深度长文"
-      />
     </Dialog>
   );
 }

@@ -57,7 +57,7 @@ export function LinkDialog({ open, onOpenChange, onCreated }: Props) {
             网页链接剪藏
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            粘贴 URL，AI 自动抓取正文并分块入库
+            粘贴网页链接，AI 自动提取正文并沉淀至知识库
           </DialogDescription>
         </DialogHeader>
         <div className="py-2 space-y-2">

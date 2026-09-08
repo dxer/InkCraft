@@ -18,7 +18,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import { useState } from "react";
 import type { ReviewReport } from "@/app/api/pipeline/review/route";
 import { InkCraftMark } from "@/components/logo";
@@ -494,10 +494,7 @@ export function ReviewStage({
                   <div
                     className="markdown-body rounded-xl border bg-card px-8 py-8 shadow-sm"
                     dangerouslySetInnerHTML={{
-                      __html: marked.parse(canvasContent, {
-                        gfm: true,
-                        breaks: true,
-                      }) as string,
+                      __html: renderMarkdown(canvasContent),
                     }}
                   />
                 </>

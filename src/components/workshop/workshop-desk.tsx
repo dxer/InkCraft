@@ -39,7 +39,6 @@ import {
 } from "@/lib/types";
 import { copyWeChatRichText } from "@/lib/wechat-format";
 import { cn } from "@/lib/utils";
-import { AiCoverDialog } from "./ai-cover-dialog";
 import { MaterialsSidebar } from "./materials-sidebar";
 import { MockNotice } from "./mock-notice";
 import { QuoteCardDialog } from "./quote-card-dialog";
@@ -84,7 +83,6 @@ export function WorkshopDesk({
   const [saveToKbOpen, setSaveToKbOpen] = useState(false);
   const [saveToKbPlatform, setSaveToKbPlatform] = useState("master");
   const [quoteCardOpen, setQuoteCardOpen] = useState(false);
-  const [coverOpen, setCoverOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [wechatCopied, setWechatCopied] = useState(false);
@@ -622,17 +620,6 @@ export function WorkshopDesk({
         }
         sourceTitle={title || project.title}
         topicTitle={project.selectedTopic?.title || ""}
-      />
-
-      {/* AI 动态生成微信公众号 SVG 封面对话框 */}
-      <AiCoverDialog
-        open={coverOpen}
-        onOpenChange={setCoverOpen}
-        title={title || project.title}
-        angle={project.selectedTopic?.angle || project.claimSnapshot?.claim || ""}
-        hook={project.selectedTopic?.hook || ""}
-        summary={canvasContent.slice(0, 200)}
-        category="深度思考"
       />
 
       {/* 草稿历史快照与安全回滚对话框 */}

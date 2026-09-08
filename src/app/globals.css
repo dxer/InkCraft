@@ -398,3 +398,136 @@
   background-color: oklch(from var(--muted) l c h / 0.2);
 }
 
+
+/* ============ 高级动效系统：墨晕游动、双层卡片呼吸与交互微动效 ============ */
+@keyframes ink-seal-in {
+  from {
+    opacity: 0;
+    transform: scale(1.15) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes ink-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ink-float-1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30px, -25px) scale(1.08);
+  }
+}
+
+@keyframes ink-float-2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-35px, 20px) scale(0.95);
+  }
+}
+
+@keyframes ink-pulse-glow {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+@keyframes ink-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.animate-ink-seal {
+  animation: ink-seal-in 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-ink-rise {
+  animation: ink-rise 0.75s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.animate-ink-float-1 {
+  animation: ink-float-1 18s ease-in-out infinite;
+}
+
+.animate-ink-float-2 {
+  animation: ink-float-2 22s ease-in-out infinite;
+}
+
+.animate-ink-pulse-glow {
+  animation: ink-pulse-glow 6s ease-in-out infinite;
+}
+
+.animate-shake {
+  animation: ink-shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes ink-float-card-1 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(0.4deg);
+  }
+}
+
+@keyframes ink-float-card-2 {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(10px) rotate(-0.4deg);
+  }
+}
+
+.animate-float-card-1 {
+  animation: ink-float-card-1 8s ease-in-out infinite;
+}
+
+.animate-float-card-2 {
+  animation: ink-float-card-2 10s ease-in-out infinite;
+}
+
+@keyframes ink-beam-scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-beam-scan {
+  animation: ink-beam-scan 3.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ink-seal,
+  .animate-ink-rise,
+  .animate-ink-float-1,
+  .animate-ink-float-2,
+  .animate-ink-pulse-glow,
+  .animate-float-card-1,
+  .animate-float-card-2,
+  .animate-beam-scan,
+  .animate-shake {
+    animation: none !important;
+  }
+}

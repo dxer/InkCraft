@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { InkCraftMark } from "./InkCraftMark";
+import {
+  CheckIcon,
+  CropIcon,
+  FileTextIcon,
+  LoaderIcon,
+  SaveIcon,
+  ScissorsIcon,
+  SettingsIcon,
+} from "./icons";
 import {
   captureActiveTab,
+  listKnowledgeBases,
   loadConfig,
   pingServer,
   saveClip,
@@ -9,6 +20,7 @@ import {
   startRegionPick,
   type ClipConfig,
   type ClipResult,
+  type KnowledgeBase,
   type SavedNote,
 } from "../lib/api";
 
@@ -20,14 +32,52 @@ const MODE_LABELS: Record<string, string> = {
   region: "区域剪藏",
 };
 
+/** 知识库选择器：默认库置顶，其余按序展示 */
+function KbSelect({
+  value,
+  kbs,
+  loading,
+  onChange,
+}: {
+  value: string;
+  kbs: KnowledgeBase[];
+  loading: boolean;
+  onChange: (id: string) => void;
+}) {
+  const nonDefault = kbs.filter((k) => !k.isDefault);
+  return (
+    <div className="kb-select">
+      <label className="kb-label">保存到</label>
+      <select
+        className="kb-select-input"
+        value={value || ""}
+        disabled={loading}
+        onChange={(e) => onChange(e.target.value)}
+        title="选择剪藏保存到的知识库"
+      >
+        <option value="">默认知识库</option>
+        {nonDefault.map((kb) => (
+          <option key={kb.id} value={kb.id}>
+            {kb.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function App() {
   const [config, setConfig] = useState<ClipConfig>({
     serverUrl: "http://localhost:3001",
     apiKey: "",
+    kbId: "",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
+  const [kbsLoading, setKbsLoading] = useState(false);
 
   const [result, setResult] = useState<ClipResult | null>(null);
   const [capturing, setCapturing] = useState<"page" | "selection" | null>(null);
@@ -47,6 +97,29 @@ export function App() {
     });
   }, []);
 
+  // 配置就绪后拉取知识库列表；记住的目标库已不存在时回退到默认
+  useEffect(() => {
+    if (!config.serverUrl || !config.apiKey) return;
+    let active = true;
+    setKbsLoading(true);
+    listKnowledgeBases(config)
+      .then((r) => {
+        if (!active) return;
+        const list = r.ok ? r.kbs || [] : [];
+        setKbs(list);
+        if (config.kbId && !list.some((k) => k.id === config.kbId)) {
+          updateConfig({ kbId: "" });
+        }
+      })
+      .finally(() => {
+        if (active) setKbsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.serverUrl, config.apiKey]);
+
   const updateConfig = useCallback((patch: Partial<ClipConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -62,7 +135,17 @@ export function App() {
     try {
       const r = await pingServer(config);
       setTestMsg({ ok: r.ok, text: r.ok ? "连接成功，Key 有效" : r.error || "连接失败" });
-      if (r.ok) await saveConfig(config);
+      if (r.ok) {
+        await saveConfig(config);
+        // 连接成功后立即刷新知识库列表，供剪藏选择目标
+        const kbRes = await listKnowledgeBases(config);
+        if (kbRes.ok) {
+          setKbs(kbRes.kbs || []);
+          if (config.kbId && !(kbRes.kbs || []).some((k) => k.id === config.kbId)) {
+            updateConfig({ kbId: "" });
+          }
+        }
+      }
     } finally {
       setTesting(false);
     }
@@ -128,8 +211,13 @@ export function App() {
     <div className="app">
       <header className="header">
         <div className="brand">
-          <span className="brand-mark">墨</span>
-          <span>墨匠剪藏</span>
+          <span className="brand-mark">
+            <InkCraftMark size={20} />
+          </span>
+          <span className="brand-text">
+            <span className="brand-name">墨匠剪藏</span>
+            <span className="brand-sub">INKCRAFT CLIPPER</span>
+          </span>
         </div>
         <div className="header-actions">
           <button
@@ -137,12 +225,25 @@ export function App() {
             title="连接配置"
             onClick={() => setSettingsOpen((v) => !v)}
           >
-            ⚙
+            <SettingsIcon size={14} />
           </button>
         </div>
       </header>
 
       <div className="main">
+        {configured && (
+          <KbSelect
+            value={config.kbId || ""}
+            kbs={kbs}
+            loading={kbsLoading}
+            onChange={(kbId) => {
+              const next = { ...config, kbId };
+              setConfig(next);
+              saveConfig(next);
+            }}
+          />
+        )}
+
         {settingsOpen && (
           <div className="settings">
             <div className="field">
@@ -179,7 +280,7 @@ export function App() {
           <div className="empty">
             尚未配置 API Key
             <br />
-            点击右上角 ⚙ 填写服务地址与 Key
+            点击右上角设置按钮，填写服务地址与 Key
           </div>
         )}
 
@@ -192,8 +293,11 @@ export function App() {
                 onClick={() => handleCapture("page")}
                 disabled={capturing !== null}
               >
-                <span className="emoji">{capturing === "page" ? "⏳" : "📄"}</span>
-                <span className="label">{capturing === "page" ? "提取中..." : "采集正文"}</span>
+                <span className={`capture-icon tone-blue ${capturing === "page" ? "busy" : ""}`}>
+                  {capturing === "page" ? <LoaderIcon size={16} /> : <FileTextIcon size={16} />}
+                </span>
+                <span className="label">{capturing === "page" ? "正在提取" : "采集正文"}</span>
+                <span className="hint">整页文章转 Markdown</span>
               </button>
               <button
                 className="capture-btn"
@@ -201,8 +305,11 @@ export function App() {
                 onClick={() => handleCapture("selection")}
                 disabled={capturing !== null}
               >
-                <span className="emoji">{capturing === "selection" ? "⏳" : "✂️"}</span>
-                <span className="label">{capturing === "selection" ? "提取中..." : "采集选中"}</span>
+                <span className={`capture-icon tone-amber ${capturing === "selection" ? "busy" : ""}`}>
+                  {capturing === "selection" ? <LoaderIcon size={16} /> : <ScissorsIcon size={16} />}
+                </span>
+                <span className="label">{capturing === "selection" ? "正在提取" : "采集选中"}</span>
+                <span className="hint">仅保存选中文字</span>
               </button>
               <button
                 className="capture-btn"
@@ -210,8 +317,11 @@ export function App() {
                 onClick={handleRegionPick}
                 disabled={capturing !== null}
               >
-                <span className="emoji">◱</span>
+                <span className="capture-icon tone-violet">
+                  <CropIcon size={16} />
+                </span>
                 <span className="label">区域剪藏</span>
+                <span className="hint">框选页面区域</span>
               </button>
             </div>
             {captureError && <div className="notice err">{captureError}</div>}
@@ -265,9 +375,10 @@ export function App() {
             {stage === "idle" && saveError && <div className="notice err">{saveError}</div>}
             {stage === "saved" && savedNote && (
               <div className="notice ok">
-                ✓ 已保存「{savedNote.title || "未命名笔记"}」·{" "}
+                <CheckIcon size={13} className="notice-icon" />
+                已保存「{savedNote.title || "未命名笔记"}」·{" "}
                 <a
-                  href={`${config.serverUrl}/knowledge/default?note=${savedNote.id}`}
+                  href={`${config.serverUrl}/knowledge/${savedNote.kbId || "default"}?note=${savedNote.id}`}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -278,7 +389,17 @@ export function App() {
 
             {stage !== "saved" ? (
               <button className="primary" onClick={handleSave} disabled={stage === "saving"}>
-                {stage === "saving" ? "保存中..." : "保存到墨匠"}
+                {stage === "saving" ? (
+                  <>
+                    <LoaderIcon size={14} />
+                    保存中...
+                  </>
+                ) : (
+                  <>
+                    <SaveIcon size={14} />
+                    保存到墨匠
+                  </>
+                )}
               </button>
             ) : (
               <button

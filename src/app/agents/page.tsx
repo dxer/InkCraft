@@ -210,12 +210,12 @@ export default function AgentsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Users className="size-5 text-muted-foreground" />
-            编辑部
-            <span className="text-sm font-normal text-muted-foreground">The Editorial Staff</span>
+            <Sparkles className="size-5 text-primary" />
+            创作技能
+            <span className="text-sm font-normal text-muted-foreground">Creative Skills</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            平台写作与视觉生图技能名册，区分文本创作与视觉配图，支持启用/禁用与自定义扩展。
+            涵盖各平台写作、视觉配图与审校技能，支持按需配置、自由开关与自定义扩展。
           </p>
         </div>
 
@@ -485,7 +485,7 @@ function AgentCard({
           </span>
           <span className="text-muted-foreground/40">·</span>
           <span className="shrink-0">
-            温度 <code className="font-semibold text-foreground text-[10px]">{agent.temperature}</code>
+            发散度 <code className="font-semibold text-foreground text-[10px]">{agent.temperature}</code>
           </span>
         </div>
 
@@ -653,8 +653,8 @@ function CreateAgentDialog({
 请输出结构化方案：
 1. **封面设计概念**：一句话说明配图的视觉隐喻与艺术风格；
 2. **生图中文提示词**：包含主体描摹、环境构图、色彩搭配、光影质感与镜头角度；
-3. **生图英文提示词 (Midjourney / SD)**：标准且经过调优的高质量英文生图 Prompt（包含参数如 --ar 16:9 或 --ar 3:4，--v 6.0 等）；
-4. **负向提示词 (Negative Prompt)**：需排除的低质元素。`);
+3. **生图英文描述 (用于 Midjourney / SD)**：标准且传神的高质量英文生图词（可附带尺寸参数如 --ar 16:9 或 --ar 3:4 等）；
+4. **画面规避要素 (需避开的低质缺陷)**：需排除的模糊、变形、残缺、低分辨率、水印等瑕疵元素。`);
       }
       setTemperature(0.75);
     } else {
@@ -765,32 +765,32 @@ function CreateAgentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="create-persona" className="text-xs font-medium">人格与调性定位 (Persona)</Label>
+            <Label htmlFor="create-persona" className="text-xs font-medium">角色人设与风格定位 (Persona)</Label>
             <Input
               id="create-persona"
               value={persona}
               onChange={(e) => setPersona(e.target.value)}
-              placeholder="简要描述专家背景、排版规范或生图风格偏好"
+              placeholder="简要描述专家背景、写作口吻或审美风格偏好"
               className="rounded-md text-xs"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="create-prompt" className="text-xs font-medium">系统提示词与准则 (System Prompt) *</Label>
+            <Label htmlFor="create-prompt" className="text-xs font-medium">工位执勤准则与规范 *</Label>
             <Textarea
               id="create-prompt"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               className="min-h-44 max-h-[45vh] overflow-y-auto font-mono text-xs leading-relaxed rounded-md"
-              placeholder={modality === "image" ? "编写详细的生图 Prompt 生成准则、参数要求与负向提示词规范……" : "编写详细的写作规范、结构要求与排版准则……"}
+              placeholder={modality === "image" ? "设定 AI 的画面设计规范、视觉风格偏好与需避免的低质缺陷……" : "设定 AI 的写作规范、语气语调、文章结构与排版准则……"}
             />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="create-temperature" className="text-xs font-medium">
-                模型创造力 (Temperature): <span className="font-mono font-semibold">{temperature}</span>
+                发散度与创造力: <span className="font-mono font-semibold">{temperature}</span>
               </Label>
               <span className="text-[10px] text-muted-foreground">
-                0.2 严谨结构 · 0.7 均衡生动 · 1.0 极富发散
+                0.2 结构严谨 · 0.7 均衡生动 · 1.0 放飞脑洞
               </span>
             </div>
             <input
@@ -974,23 +974,23 @@ function EditAgentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="prompt" className="text-xs font-medium">系统提示词与规范 (System Prompt)</Label>
+            <Label htmlFor="prompt" className="text-xs font-medium">工位执勤准则与规范 *</Label>
             <Textarea
               id="prompt"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               className="min-h-44 max-h-[45vh] overflow-y-auto font-mono text-xs leading-relaxed rounded-md"
-              placeholder="编写详细的提示词规范……"
+              placeholder="编写详细的执勤准则与生成规范……"
             />
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="temperature" className="text-xs font-medium">
-                模型创造力 (Temperature): <span className="font-mono font-semibold">{temperature}</span>
+                发散度与创造力: <span className="font-mono font-semibold">{temperature}</span>
               </Label>
               <span className="text-[10px] text-muted-foreground">
-                0.2 极其严谨 · 0.7 均衡生动 · 1.0 极富发散
+                0.2 结构严谨 · 0.7 均衡生动 · 1.0 放飞脑洞
               </span>
             </div>
             <input

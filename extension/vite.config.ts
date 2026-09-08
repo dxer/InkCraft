@@ -14,9 +14,9 @@ export default defineConfig({
         popup: fileURLToPath(new URL("./popup.html", import.meta.url)),
       },
       output: {
-        entryFileNames: "assets/[name].js",
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name][extname]",
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
   },

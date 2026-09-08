@@ -156,9 +156,9 @@ export default function WorksPage() {
         <div>
           <h1 className="flex items-center gap-2 text-lg sm:text-xl font-semibold tracking-tight">
             <Library className="size-5 text-muted-foreground" />
-            成品库
+            作品库
             <span className="text-xs sm:text-sm font-normal text-muted-foreground">
-              The Shelf
+              Works Gallery
             </span>
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">

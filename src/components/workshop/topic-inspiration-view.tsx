@@ -16,7 +16,6 @@ import {
   PenLine,
   Plus,
   RefreshCw,
-  Search,
   Share2,
   Sparkles,
 } from "lucide-react";
@@ -25,23 +24,18 @@ import { useCallback, useEffect, useState } from "react";
 import type { IdeatedTopic } from "@/app/api/workshop/ideate/route";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PLATFORM_SKILLS, type PlatformSkillId, type TopicRepositoryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface TopicInspirationViewProps {
   onSelectTopic: (topic: IdeatedTopic) => void;
-  initialSkill?: PlatformSkillId;
 }
 
 export function TopicInspirationView({
   onSelectTopic,
-  initialSkill,
 }: TopicInspirationViewProps) {
   const [direction, setDirection] = useState("");
-  const [preferredSkill, setPreferredSkill] = useState<PlatformSkillId | "all">(
-    initialSkill || "all"
-  );
   const [repoTopics, setRepoTopics] = useState<TopicRepositoryItem[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -70,14 +64,13 @@ export function TopicInspirationView({
   }, [fetchRepoTopics]);
 
   // 仅当用户主动点击时，才调用 AI 进行现场碰撞生成
-  async function handleGenerateNew(dir?: string, skill?: PlatformSkillId | "all") {
+  async function handleGenerateNew(dir?: string) {
     if (generating) return;
     setGenerating(true);
     setError(null);
     setGenNotice(null);
 
     const activeDir = dir !== undefined ? dir : direction;
-    const activeSkill = skill !== undefined ? skill : preferredSkill;
 
     try {
       const res = await fetch("/api/workshop/ideate", {
@@ -85,7 +78,6 @@ export function TopicInspirationView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           direction: activeDir === "全部知识储备碰撞" ? "" : activeDir,
-          preferredSkill: activeSkill === "all" ? undefined : activeSkill,
         }),
       });
 
@@ -107,16 +99,15 @@ export function TopicInspirationView({
     }
   }
 
-  // 根据当前输入的搜索词与所选平台进行本地即时过滤
+  // 根据当前输入的搜索词进行本地即时过滤
   const filteredTopics = repoTopics.filter((t) => {
-    const matchSkill = preferredSkill === "all" || t.targetSkill === preferredSkill;
     const kw = direction.trim().toLowerCase();
     const matchKw =
       !kw ||
       kw === "全部知识储备碰撞" ||
       t.title.toLowerCase().includes(kw) ||
       (t.angle && t.angle.toLowerCase().includes(kw));
-    return matchSkill && matchKw;
+    return matchKw;
   });
 
   const PAGE_SIZE = 4;
@@ -152,7 +143,10 @@ export function TopicInspirationView({
       <header className="flex h-12 shrink-0 items-center justify-between border-b bg-card/60 px-6 backdrop-blur">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-amber-500" />
-          <span className="text-sm font-semibold text-foreground">墨匠工坊 · 创作灵感大厅</span>
+          <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            创作工坊
+            <span className="text-xs font-normal text-muted-foreground">The Workshop</span>
+          </span>
         </div>
         <Link
           href="/topics"
@@ -179,71 +173,35 @@ export function TopicInspirationView({
 
           {/* 筛选与生成控制栏 */}
           <div className="rounded-2xl border bg-card/80 p-4 shadow-xs space-y-3">
-            <div className="flex flex-col sm:flex-row gap-2.5 items-center">
-              <div className="relative flex-1 w-full">
-                <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  value={direction}
-                  onChange={(e) => setDirection(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleGenerateNew();
-                  }}
-                  placeholder="搜索现有选题关键词，或输入特定方向让 AI 现场生成……"
-                  className="h-10 pl-9 text-xs rounded-xl bg-background"
-                />
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Button
-                  size="default"
-                  onClick={() => void handleGenerateNew()}
-                  disabled={generating}
-                  className="h-10 flex-1 sm:flex-initial px-4 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer shadow-xs"
-                  title="让 AI 现场分析并生成一批全新选题"
-                >
-                  {generating ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-3.5 text-amber-300" />
-                  )}
-                  <span>{generating ? "AI 碰撞中…" : "让 AI 现场碰撞新灵感"}</span>
-                </Button>
-              </div>
+            <div className="relative">
+              <Textarea
+                value={direction}
+                onChange={(e) => setDirection(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void handleGenerateNew();
+                  }
+                }}
+                placeholder="搜索现有选题，或输入你想创作的方向与灵感……"
+                className="min-h-20 w-full rounded-xl bg-background p-3 text-xs leading-relaxed resize-y border-muted-foreground/20 focus-visible:border-primary/50"
+              />
             </div>
-
-            {/* 平台技能偏好筛选 */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-border/40">
-              <span className="text-[11px] text-muted-foreground font-medium shrink-0">适配平台：</span>
-              <button
-                type="button"
-                onClick={() => setPreferredSkill("all")}
-                className={cn(
-                  "rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer border",
-                  preferredSkill === "all"
-                    ? "border-foreground/30 bg-foreground text-background font-semibold"
-                    : "border-transparent bg-muted/60 text-muted-foreground hover:text-foreground"
-                )}
+            <div className="flex items-center justify-end">
+              <Button
+                size="default"
+                onClick={() => void handleGenerateNew()}
+                disabled={generating}
+                className="h-9 w-full sm:w-auto px-4 rounded-xl text-xs font-semibold gap-1.5 cursor-pointer shadow-xs shrink-0"
+                title="让 AI 现场分析并生成一批全新选题"
               >
-                全平台推荐
-              </button>
-              {PLATFORM_SKILLS.map((skill) => {
-                const active = preferredSkill === skill.id;
-                const count = repoTopics.filter((t) => t.targetSkill === skill.id).length;
-                return (
-                  <button
-                    key={skill.id}
-                    type="button"
-                    onClick={() => setPreferredSkill(skill.id)}
-                    className={cn(
-                      "rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer border",
-                      active
-                        ? cn(skill.color, "font-semibold border-current shadow-2xs")
-                        : "border-transparent bg-muted/60 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {skill.name} ({count})
-                  </button>
-                );
-              })}
+                {generating ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3.5 text-amber-300" />
+                )}
+                <span>{generating ? "AI 碰撞中…" : "让 AI 现场碰撞新灵感"}</span>
+              </Button>
             </div>
           </div>
 
@@ -273,9 +231,6 @@ export function TopicInspirationView({
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-foreground">精选待写选题（来自选题库）</span>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                  共 {filteredTopics.length} 个切角 {totalBatches > 1 && `· 第 ${currentBatchIndex + 1}/${totalBatches} 批`}
-                </span>
               </div>
               {filteredTopics.length > PAGE_SIZE && (
                 <Button

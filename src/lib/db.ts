@@ -24,6 +24,7 @@ function resolveDbPath(): string {
 function createDb(): Database.Database {
   const db = new Database(resolveDbPath());
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
   db.pragma("foreign_keys = ON");
   migrate(db);
   seedCardExtractAgent(db);
@@ -314,6 +315,14 @@ function runLegacyMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_topic_repo_created ON topic_repository(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_topic_repo_title ON topic_repository(title);
     CREATE INDEX IF NOT EXISTS idx_topic_repo_status ON topic_repository(status);
+
+    -- 11.5 登录失败审计（设置页安全面板展示最近失败记录；插入侧裁剪保留最近 50 条）
+    CREATE TABLE IF NOT EXISTS auth_login_failures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ip TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_auth_login_failures_created ON auth_login_failures(created_at);
 
     -- 11. API 密钥表（MCP 与外部 Agent 鉴权调用）
     CREATE TABLE IF NOT EXISTS api_keys (
@@ -625,32 +634,12 @@ export const PLATFORM_SKILL_PRESETS = [
 5. **社交平台封面建议**：针对小红书/公众号/知乎等平台的排版与主标题放置建议。`,
     temperature: 0.75,
   },
-  {
-    id: "skill_cover",
-    stage: "cover",
-    name: "墨视觉 · SVG 封面美学师",
-    persona:
-      "微信公众号 2.35:1 矢量 SVG 封面总监，擅长根据文章核心隐喻编写高质感渐变、几何图形、发光微粒与居中安全区文字排版的纯 SVG XML 代码",
-    system_prompt: `你是顶尖的数字视觉设计师与 SVG 矢量图形代码专家，专注于为微信公众号生成标准 2.35:1 比例（viewBox="0 0 900 383"）的高质感现代封面图。
-
-核心设计准则：
-1. 严格输出标准、合法的 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 383" width="100%" height="100%">...</svg> 纯代码；
-2. 层次结构要求：
-   - <defs>：定义优雅的深色/渐变背景（linearGradient/radialGradient）、微光滤镜（filter feGaussianBlur）；
-   - 背景层：充满 900x383 的渐变底色与细腻的环境网格/微光点/粒子；
-   - 视觉隐喻层（关键）：根据文章的主题意象，用 path/circle/polygon/rect 组合绘制 1~2 个具有现代抽象美感的几何图形、立体透视、发光能量环、流动波浪或拓扑网络；
-   - 排版文字层：
-     * 必须严格位于黄金安全区内（x: 80~820, y: 50~330）；
-     * 分类标签徽章：圆角矩形 + 精致小字（如「深度思考」）；
-     * 文章核心大标题：字号 32~38px，加粗，主对比色；若较长分两行展示（使用 <tspan>）；
-     * 破题副标题/金句：字号 16~18px，副对比色；
-     * 品牌印章/标识：墨匠「匠」字圆角小印章。
-3. 风格基调：高对比、现代、克制、富有科技与人文张力，严禁低质平铺。`,
-    temperature: 0.7,
-  },
 ];
 
 function seedPlatformSkillAgents(db: Database.Database): void {
+  // 清理历史遗留的 SVG 封面技能
+  db.prepare("DELETE FROM custom_agents WHERE id = 'skill_cover' OR stage = 'cover'").run();
+
   const insert = db.prepare(
     `INSERT OR IGNORE INTO custom_agents (id, stage, name, persona, system_prompt, model, temperature, is_preset)
      VALUES (?, ?, ?, ?, ?, NULL, ?, 1)`,

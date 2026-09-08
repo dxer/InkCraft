@@ -11,8 +11,8 @@ import {
   PanelLeftClose,
   Search,
   Settings,
+  Sparkles,
   Tag,
-  Users,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
@@ -32,7 +32,7 @@ const SECTIONS = [
   {
     title: "知识库",
     items: [
-      { href: "/knowledge", label: "全部笔记", icon: BookOpen },
+      { href: "/knowledge", label: "知识库", icon: BookOpen },
       { href: "/cards", label: "知识卡片", icon: IdCard },
       { href: "/tags", label: "标签索引", icon: Tag },
     ],
@@ -42,7 +42,7 @@ const SECTIONS = [
     items: [
       { href: "/topics", label: "选题雷达", icon: Lightbulb },
       { href: "/works", label: "作品库", icon: Library },
-      { href: "/agents", label: "创作技能", icon: Users },
+      { href: "/agents", label: "创作技能", icon: Sparkles },
     ],
   },
 ] as const;

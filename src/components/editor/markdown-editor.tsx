@@ -26,7 +26,7 @@ import {
   Strikethrough,
   X,
 } from "lucide-react";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -431,7 +431,7 @@ export function MarkdownEditor({
   // Markdown HTML 渲染
   const renderedHtml = React.useMemo(() => {
     try {
-      return marked.parse(val || "", { gfm: true, breaks: true }) as string;
+      return renderMarkdown(val || "");
     } catch {
       return val;
     }

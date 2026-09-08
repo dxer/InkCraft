@@ -228,8 +228,8 @@ export function GatherStage({ project, onProjectUpdate }: GatherStageProps) {
         )}
         {searched && !loading && hits.length === 0 && (
           <div className="rounded-xl border border-dashed py-16 text-center">
-            <p className="text-sm font-medium">没有命中的切片</p>
-            <p className="mt-1 text-xs text-muted-foreground">换个说法重试，或缩短检索词。</p>
+            <p className="text-sm font-medium">未检索到相关笔记原料</p>
+            <p className="mt-1 text-xs text-muted-foreground">换个说法重试，或缩短检索关键词。</p>
           </div>
         )}
         {hits.length > 0 && (

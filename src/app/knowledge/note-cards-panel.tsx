@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import {
   Dialog,
   DialogContent,
@@ -72,13 +72,13 @@ export function NoteCardsPanel({
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-foreground">原子知识卡片</span>
+              <span className="text-xs font-semibold text-foreground">精炼知识卡片</span>
               <span className="rounded-full bg-primary/10 px-1.5 py-0.2 text-[10px] font-bold text-primary tabular-nums">
                 {cards.length}
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground truncate">
-              Permanent Notes 萃取沉淀
+              核心论点与金句萃取
             </p>
           </div>
         </div>
@@ -96,7 +96,7 @@ export function NoteCardsPanel({
           ) : (
             <RefreshCw className="size-3" />
           )}
-          <span>{extracting ? "萃取中..." : "重新提炼"}</span>
+          <span>{extracting ? "提炼中..." : "重新提炼"}</span>
         </Button>
       </div>
 
@@ -130,9 +130,9 @@ export function NoteCardsPanel({
           <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/10">
             <IdCard className="mx-auto size-8 text-muted-foreground/40" />
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-foreground">暂无萃取的知识卡片</p>
+              <p className="text-xs font-semibold text-foreground">暂无提炼的知识卡片</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                AI 后台将深度剖析笔记，提炼出 1~3 张包含断言、Hook 与底层机制的高价值原子卡片。
+                AI 将深度剖析笔记，提炼出 1~3 张包含核心论点、亮眼金句与关键事实的精炼卡片。
               </p>
             </div>
             <Button
@@ -142,7 +142,7 @@ export function NoteCardsPanel({
               className="h-8 gap-1.5 px-3 text-xs font-semibold rounded-lg cursor-pointer"
             >
               {extracting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-              <span>{extracting ? "正在深度提炼中..." : "立即提炼原子卡片"}</span>
+              <span>{extracting ? "正在深度提炼中..." : "立即提炼知识卡片"}</span>
             </Button>
           </div>
         ) : (
@@ -292,7 +292,7 @@ function DetailCardDialog({
 
   const htmlBody = (() => {
     try {
-      return marked.parse(body || "", { gfm: true, breaks: true }) as string;
+      return renderMarkdown(body || "");
     } catch {
       return body;
     }

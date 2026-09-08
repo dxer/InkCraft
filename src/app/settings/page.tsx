@@ -61,7 +61,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { VoiceProfile } from "@/app/api/voices/route";
 
-type TabId = "models" | "voices" | "mcp" | "extension" | "export";
+type TabId = "models" | "voices" | "mcp" | "extension" | "export" | "security";
 
 const TABS: { id: TabId; label: string; icon: typeof KeyRound }[] = [
   { id: "models", label: "模型与服务商", icon: KeyRound },
@@ -69,6 +69,7 @@ const TABS: { id: TabId; label: string; icon: typeof KeyRound }[] = [
   { id: "mcp", label: "外部助手连接 (MCP)", icon: Bot },
   { id: "extension", label: "浏览器剪藏扩展", icon: Puzzle },
   { id: "export", label: "数据导出与迁移", icon: DatabaseBackup },
+  { id: "security", label: "访问口令与安全", icon: ShieldCheck },
 ];
 
 type ModelKind = "text" | "embedding" | "image";
@@ -88,9 +89,9 @@ interface ProviderDraft {
 }
 
 const MODEL_KINDS: { kind: ModelKind; label: string; className: string }[] = [
-  { kind: "text", label: "文本", className: "text-foreground" },
-  { kind: "embedding", label: "嵌入", className: "text-primary" },
-  { kind: "image", label: "图片", className: "text-amber-600" },
+  { kind: "text", label: "文本写作", className: "text-foreground" },
+  { kind: "embedding", label: "语义检索", className: "text-primary" },
+  { kind: "image", label: "配图生成", className: "text-amber-600" },
 ];
 
 interface ChannelDraft {
@@ -207,6 +208,7 @@ export default function SettingsPage() {
       {tab === "mcp" && <McpTab />}
       {tab === "extension" && <ExtensionTab />}
       {tab === "export" && <ExportTab />}
+      {tab === "security" && <SecurityTab />}
     </div>
   );
 }
@@ -565,30 +567,30 @@ function ModelsTab() {
             模型通道分配
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground">
-            为文本推理、向量嵌入与图片三类模型分别指定提供商；未指定的类别自动回退到第一个可用的提供商。
+            分别为「文字创作」、「语义检索」与「配图生成」指定默认服务商；未指定的类别将自动调用默认服务商。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 pt-0 grid gap-4 sm:grid-cols-3">
           <ChannelSelect
-            label="文本模型通道"
+            label="文字创作通道"
             icon={MessageSquareText}
-            hint="工坊流水线 / 智能整理 / AI 问答"
+            hint="文章起草 / 提纲发散 / 智能建议"
             value={channels.text}
             options={kindOptions("text")}
             onChange={(v) => setChannels((prev) => ({ ...prev, text: v }))}
           />
           <ChannelSelect
-            label="嵌入模型通道"
+            label="语义检索通道"
             icon={Boxes}
-            hint="向量化与语义检索"
+            hint="知识库语义关联与深度检索"
             value={channels.embedding}
             options={kindOptions("embedding")}
             onChange={(v) => setChannels((prev) => ({ ...prev, embedding: v }))}
           />
           <ChannelSelect
-            label="图片模型通道"
+            label="配图生成通道"
             icon={ImageIcon}
-            hint="图片生成与理解（预留）"
+            hint="文章配图与封面生成"
             value={channels.image}
             options={kindOptions("image")}
             onChange={(v) => setChannels((prev) => ({ ...prev, image: v }))}
@@ -752,7 +754,7 @@ function ModelsTab() {
               选择要使用的模型 · {pickerName}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              勾选要使用的模型，确认后只保留选中的；再给模型标注「文本/嵌入/图片」类型。
+              勾选要启用的模型，并设置其主要用途（写作 / 语义检索 / 配图）。
             </DialogDescription>
           </DialogHeader>
 
@@ -888,7 +890,7 @@ function ModelsTab() {
                     配置提供商
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground">
-                    填写接口信息并选择要使用的模型；另外可给模型标注「文本/嵌入/图片」类型。
+                    填写模型服务地址与密钥，并选择要启用的模型及用途。
                   </DialogDescription>
                 </DialogHeader>
 
@@ -924,7 +926,7 @@ function ModelsTab() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">API BaseURL</Label>
+                      <Label className="text-xs">服务地址 (BaseURL)</Label>
                       <Input
                         value={p.baseUrl}
                         onChange={(e) =>
@@ -935,7 +937,7 @@ function ModelsTab() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">API Key</Label>
+                      <Label className="text-xs">访问密钥 (API Key)</Label>
                       <Input
                         type="password"
                         value={p.apiKey}
@@ -1350,7 +1352,7 @@ function VoicesTab() {
               <div className="space-y-2">
                 {previewMock && (
                   <div className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
-                    未配置 BYOK 端点，以下为示意样张；配置后可听到真实克隆效果。
+                    尚未配置大模型服务，以下为示意效果；接入模型后即可体验真实的文风提炼与生成。
                   </div>
                 )}
                 <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 font-sans text-sm leading-relaxed text-foreground/90">
@@ -1584,7 +1586,7 @@ function ExtensionTab() {
     setTimeout(() => setCopied(null), 1500);
   }
 
-  const endpoint = `${origin}/api/extension`;
+  const endpoint = origin || "http://localhost:3000";
 
   return (
     <div className="space-y-6">
@@ -1602,7 +1604,7 @@ function ExtensionTab() {
         </CardHeader>
         <CardContent className="p-6 pt-0 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">服务接口地址</Label>
+            <Label className="text-xs">服务地址</Label>
             <div className="flex gap-2">
               <Input
                 readOnly
@@ -1699,6 +1701,183 @@ function ExtensionTab() {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ============ 标签页六：访问口令与安全 ============ */
+
+function SecurityTab() {
+  const [passwordFromEnv, setPasswordFromEnv] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+  const [failures, setFailures] = useState<{ ip: string; at: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/auth/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setPasswordFromEnv(!!data?.passwordFromEnv))
+      .catch(() => {});
+    fetch("/api/settings/login-failures")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setFailures(data?.failures || []))
+      .catch(() => {});
+  }, []);
+
+  async function changePassword() {
+    if (newPassword !== confirmPassword) {
+      setFeedback({ ok: false, text: "两次输入的新口令不一致" });
+      return;
+    }
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/settings/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setFeedback({
+          ok: true,
+          text: "口令已修改。其他已登录设备已全部失效，需用新口令重新登录；当前设备保持登录。",
+        });
+      } else {
+        setFeedback({ ok: false, text: data?.error || "修改失败，请稍后再试" });
+      }
+    } catch {
+      setFeedback({ ok: false, text: "网络异常，请稍后再试" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function formatFailureTime(at: string): string {
+    // SQLite CURRENT_TIMESTAMP 为 UTC，转本地时区展示
+    const d = new Date(at.replace(" ", "T") + "Z");
+    return isNaN(d.getTime()) ? at : d.toLocaleString();
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="rounded-xl border bg-card shadow-xs">
+        <CardHeader className="p-6 pb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-primary" />
+            <CardTitle className="text-base font-semibold">访问口令</CardTitle>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            修改后其他已登录设备会全部失效，需用新口令重新登录；当前设备保持登录。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 pt-0 space-y-4">
+          {passwordFromEnv ? (
+            <div className="text-xs text-muted-foreground rounded-md bg-muted/40 px-3 py-2.5 leading-relaxed">
+              当前访问口令由环境变量{" "}
+              <span className="font-mono font-semibold">ACCESS_PASSWORD</span>{" "}
+              配置，网页端修改不会生效。请直接修改部署配置（docker-compose.yml
+              等）后重启容器。
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">当前口令</Label>
+                  <Input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="h-9 text-xs rounded-md"
+                    autoComplete="current-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">新口令（至少 4 位）</Label>
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-9 text-xs rounded-md"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">确认新口令</Label>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="h-9 text-xs rounded-md"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </div>
+              {feedback && (
+                <div
+                  className={`text-xs leading-relaxed ${
+                    feedback.ok
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-destructive"
+                  }`}
+                >
+                  {feedback.text}
+                </div>
+              )}
+              <Button
+                size="sm"
+                className="h-8 gap-1 text-xs rounded-md cursor-pointer"
+                disabled={saving || !currentPassword || !newPassword}
+                onClick={changePassword}
+              >
+                {saving && <Loader2 className="size-3.5 animate-spin" />}
+                修改口令
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-xl border bg-card shadow-xs">
+        <CardHeader className="p-6 pb-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 text-primary" />
+            <CardTitle className="text-base font-semibold">
+              最近登录失败记录
+            </CardTitle>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            最近 10 次口令验证失败（登录或修改口令时触发）。若出现陌生来源，请尽快修改口令。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 pt-0">
+          {failures.length === 0 ? (
+            <div className="text-xs text-muted-foreground">暂无失败记录。</div>
+          ) : (
+            <div className="space-y-1.5">
+              {failures.map((f, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between text-xs rounded-md bg-muted/40 px-3 py-2"
+                >
+                  <span className="font-mono font-semibold">{f.ip}</span>
+                  <span className="text-muted-foreground">
+                    {formatFailureTime(f.at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

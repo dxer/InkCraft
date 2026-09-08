@@ -10,6 +10,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ function formatDate(dateStr?: string) {
 }
 
 export default function KnowledgePage() {
+  const router = useRouter();
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
   const [newKbOpen, setNewKbOpen] = useState(false);
@@ -88,7 +90,7 @@ export default function KnowledgePage() {
   }
 
   function openKb(id: string) {
-    window.open(`/knowledge/${id}`, "_blank");
+    router.push(`/knowledge/${id}`);
   }
 
   function handleMenuClick(id: string, e: React.MouseEvent) {

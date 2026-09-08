@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { StageBadge } from "@/components/badges";
 import { Badge } from "@/components/ui/badge";
+import { escapeHtml } from "@/lib/markdown";
 import type { KnowledgeBase, NoteItem } from "@/lib/types";
 
 interface SearchWork {
@@ -376,7 +377,10 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                         <div
                           className="text-xs text-muted-foreground line-clamp-2 leading-relaxed"
                           dangerouslySetInnerHTML={{
-                            __html: note.snippet.replace(/【/g, '<span class="text-primary font-bold">').replace(/】/g, '</span>'),
+                            // snippet 源自笔记正文（可能含剪藏网页内容），先转义再叠加【】高亮标记
+                            __html: escapeHtml(note.snippet)
+                              .replace(/【/g, '<span class="text-primary font-bold">')
+                              .replace(/】/g, '</span>'),
                           }}
                         />
                       ) : (

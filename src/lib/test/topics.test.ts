@@ -96,7 +96,8 @@ test("updateTopicStatusInDb & getTopicsFromDb: 状态更新与条件筛选", () 
 });
 
 test("checkAndMineHourlyTopics: 无新笔记时自动跳过，不消耗 Token", async () => {
-  // 设置上次扫描时间为未来很远的时间点，确保无新笔记
+  // 确保重置运行锁与上次扫描时间
+  setSetting(SETTING_KEY_MINING_STATUS, "idle");
   setSetting("topic_mining.last_scanned_at", new Date(Date.now() + 100000).toISOString());
 
   const result = await checkAndMineHourlyTopics({ force: true });

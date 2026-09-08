@@ -35,7 +35,7 @@ export function SproutPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground tracking-tight flex items-center gap-2">
-                <span>智鉴 · 知识发芽档案 (Sprout)</span>
+                <span>智鉴 · 灵感关联与发散大纲</span>
                 <Badge
                   variant="outline"
                   className="text-[10px] font-normal px-1.5 py-0 h-4 text-emerald-600 border-emerald-500/30"
@@ -44,7 +44,7 @@ export function SproutPanel({
                 </Badge>
               </h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                以本篇笔记为「种子」，跨库检索知识养料，叙事型思考教练讲透它的来路与去处
+                以本篇笔记为核心，跨库关联知识素材，叙事型思考教练理清脉络并推演成文大纲
               </p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export function SproutPanel({
             <RefreshCw
               className={`size-3 ${reSprouting ? "animate-spin" : ""}`}
             />
-            <span>{reSprouting ? "正在发散发芽..." : "重新知识发芽"}</span>
+            <span>{reSprouting ? "正在发散关联..." : "重新激发灵感"}</span>
           </Button>
         </div>
 
@@ -200,14 +200,13 @@ export function SproutPanel({
                 onClick={() => onSendToWorkshop(sprout)}
                 className="h-7 gap-1.5 rounded-md bg-foreground px-3 text-xs font-semibold text-background shadow-xs hover:bg-foreground/90"
               >
-                <Sparkles className="size-3.5" />🚀 一键以此大纲装配长文
-                (自动挂载素材)
+                <Sparkles className="size-3.5" />以本大纲起草长文 (自动带入关联素材)
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-3 py-10 text-center text-xs text-muted-foreground">
-            <p>当前笔记尚未进行「智鉴发芽」</p>
+            <p>当前笔记尚未生成「灵感关联大纲」</p>
             <Button
               size="sm"
               onClick={onReSprout}
@@ -215,7 +214,7 @@ export function SproutPanel({
               className="gap-1.5 bg-foreground text-xs font-semibold text-background hover:bg-foreground/90"
             >
               <Sprout className="size-3.5" />
-              立即启动知识发芽 (Sprout)
+              立即激发灵感大纲
             </Button>
           </div>
         )}

@@ -2,46 +2,20 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
   generateSessionToken,
   getAccessPassword,
+  isSecureRequest,
   setAccessPassword,
 } from "@/lib/auth";
+import {
+  clientIp,
+  isLoginLocked,
+  recordLoginFailure,
+  resetLoginFailures,
+} from "@/lib/login-guard";
 
 export const dynamic = "force-dynamic";
-
-/** 登录失败限流：单 IP 15 分钟窗口内最多 8 次失败，防止口令爆破 */
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX_FAILS = 8;
-const failAtByIp = new Map<string, number[]>();
-// ponytail: 单进程内存限流，Docker 单容器场景够用；多副本部署时换成共享计数（Redis/DB）
-
-function clientIp(request: Request): string {
-  const fwd = request.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return request.headers.get("x-real-ip") || "unknown";
-}
-
-function isLoginLocked(ip: string): boolean {
-  const now = Date.now();
-  const fails = (failAtByIp.get(ip) || []).filter(
-    (t) => now - t < RATE_WINDOW_MS,
-  );
-  failAtByIp.set(ip, fails);
-  return fails.length >= RATE_MAX_FAILS;
-}
-
-function recordLoginFailure(ip: string): void {
-  const now = Date.now();
-  const fails = (failAtByIp.get(ip) || []).filter(
-    (t) => now - t < RATE_WINDOW_MS,
-  );
-  fails.push(now);
-  failAtByIp.set(ip, fails);
-}
-
-function resetLoginFailures(ip: string): void {
-  failAtByIp.delete(ip);
-}
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -69,10 +43,10 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     cookieStore.set(COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(request),
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 天有效
+      maxAge: SESSION_MAX_AGE_SECONDS,
     });
     return NextResponse.json({ ok: true, firstRun: true });
   }
@@ -88,10 +62,10 @@ export async function POST(request: Request) {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 天有效
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 
   return NextResponse.json({ ok: true });

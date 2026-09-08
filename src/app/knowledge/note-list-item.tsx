@@ -125,11 +125,11 @@ export function NoteListItem({
             >
               <button
                 onClick={(e) => onQuickDraft(note, e)}
-                title="以该素材为骨架直接进入起草工位，跳过选题与匹配"
+                title="以此素材为参考，立即开始撰写长文"
                 className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
               >
                 <Zap className="size-3.5 text-primary" />
-                <span>直接成稿</span>
+                <span>直接起草长文</span>
               </button>
 
               <div className="my-0.5 h-px bg-border/60" />

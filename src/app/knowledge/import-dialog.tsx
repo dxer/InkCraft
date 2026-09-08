@@ -106,8 +106,7 @@ export function ImportDialog({ open, onOpenChange, onCreated }: Props) {
             导入长文与文献
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            支持导入 Markdown、TXT、PDF 文档或直接粘贴正文，自动分块并建立 FTS5
-            倒排索引。
+            支持导入 Markdown、TXT、PDF 文档或直接粘贴全文，系统将自动结构化整理并建立全库即时检索。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1">
@@ -148,7 +147,7 @@ export function ImportDialog({ open, onOpenChange, onCreated }: Props) {
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {selectedFile
-                ? `已挂载文件: ${selectedFile.name}`
+                ? `已选文件: ${selectedFile.name}`
                 : "支持直接粘贴全文"}
             </span>
             <span className="tabular-nums">

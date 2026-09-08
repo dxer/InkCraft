@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { getDb } from "./db";
 
 export function getSettings(): Record<string, string> {
@@ -159,9 +160,13 @@ export function getClipKey(): string | null {
   return key || null;
 }
 
-/** 插件请求鉴权：校验 X-InkCraft-Key 请求头 */
+/** 插件请求鉴权：校验 X-InkCraft-Key 请求头（恒时比较，避免时序侧信道） */
 export function verifyClipKey(request: Request): boolean {
   const provided = request.headers.get("x-inkcraft-key")?.trim() || "";
   const expected = getClipKey();
-  return !!provided && !!expected && provided === expected;
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

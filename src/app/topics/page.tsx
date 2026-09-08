@@ -370,7 +370,7 @@ export default function TopicsPage() {
               <Zap className="size-4" />
             </span>
             <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              智能选题雷达
+              选题雷达
             </h1>
             <span className="text-xs font-normal text-muted-foreground">Topic Radar</span>
             {stats && (
@@ -380,7 +380,7 @@ export default function TopicsPage() {
             )}
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            将原子知识卡片主动重组为高传播力创作方案：三大碰撞策略 · 多风格标题矩阵 · 精确锚定卡片大纲。
+            连接知识库中的沉淀素材，智能推演高价值写作方案：反差突破 · 跨界隐喻 · 专题深度叙事。
           </p>
         </div>
 
@@ -390,8 +390,8 @@ export default function TopicsPage() {
             className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border/60 px-2.5 py-1.5 rounded-xl shadow-2xs"
             title={
               stats?.lastScannedAt
-                ? `上次碰撞时间：${new Date(stats.lastScannedAt).toLocaleString("zh-CN")}`
-                : "尚未执行过智能雷达碰撞"
+                ? `上次选题时间：${new Date(stats.lastScannedAt).toLocaleString("zh-CN")}`
+                : "尚未激发过选题"
             }
           >
             <Clock className="size-3.5 text-muted-foreground/70 shrink-0" />
@@ -406,14 +406,14 @@ export default function TopicsPage() {
             onClick={handleTriggerRadarMining}
             disabled={mining}
             className="h-8.5 gap-1.5 rounded-xl text-xs font-semibold cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-75 disabled:cursor-not-allowed"
-            title={mining ? "选题雷达正在后台深度碰撞，请稍候..." : "以当前选中的碰撞模式触发卡片高维重组"}
+            title={mining ? "AI 正在深度推演高传播力选题，请稍候..." : "基于知识库沉淀智能激发新选题"}
           >
             {mining ? (
               <Loader2 className="size-3.5 animate-spin text-primary-foreground" />
             ) : (
               <Sparkles className="size-3.5 text-amber-300 fill-amber-300" />
             )}
-            <span>{mining ? "雷达深度碰撞中…" : "触发智能雷达碰撞"}</span>
+            <span>{mining ? "正在深度推演中…" : "激发全新选题灵感"}</span>
           </Button>
         </div>
       </div>
@@ -577,15 +577,15 @@ export default function TopicsPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground space-y-3">
           <Loader2 className="size-7 animate-spin text-primary" />
-          <p className="text-xs font-medium">正在扫描雷达选题库……</p>
+          <p className="text-xs font-medium">正在加载灵感选题库……</p>
         </div>
       ) : sortedTopics.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center rounded-2xl border border-dashed p-6 space-y-3 bg-card/40">
           <Lightbulb className="size-10 text-muted-foreground/40" />
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-foreground">暂无符合条件的雷达选题</h3>
+            <h3 className="text-sm font-semibold text-foreground">暂无符合条件的选题灵感</h3>
             <p className="text-xs text-muted-foreground max-w-sm">
-              点击上方「触发智能雷达碰撞」，系统将自动提取原子卡片资产，按选定策略碰撞策划方案。
+              点击上方「激发全新选题灵感」，AI 将基于你的个人知识库，智能推演多元成文命题与大纲。
             </p>
           </div>
           <Button
@@ -595,7 +595,7 @@ export default function TopicsPage() {
             className="h-8 gap-1.5 rounded-lg text-xs font-semibold cursor-pointer"
           >
             <Zap className="size-3.5 text-amber-300" />
-            <span>立即触发雷达碰撞</span>
+            <span>立即激发选题灵感</span>
           </Button>
         </div>
       ) : (

@@ -28,8 +28,8 @@
 
 传统的笔记软件容易让人陷入“只存不读、只收不写”的**知识仓鼠症**。墨匠重新设计了从素材输入到内容交付的全生命周期：
 
-- 🔒 **本地优先与数据自持**：所有笔记、卡片、文稿均保存在本地 SQLite 数据库中，支持 WAL 模式与 FTS5 全文毫秒级检索，不依赖第三方云端数据库；
-- 🔑 **真·BYOK（自带密钥）**：不绑定特定厂商，在后台可视化接入任意兼容 OpenAI 接口的模型服务（DeepSeek、OpenAI、SiliconFlow、Ollama 等）；
+- 🔒 **本地优先与数据自持**：所有笔记、卡片、文稿均保存在本地 SQLite 数据库中，支持 WAL 模式与全文检索，不依赖第三方云端数据库；
+- 🔑 **自由接入任意模型**：不绑定特定厂商，在设置后台可视化配置任意兼容 OpenAI 接口的模型服务（DeepSeek、OpenAI、SiliconFlow、Ollama 等）；
 - 🧠 **认知提纯与主动策划**：告别平庸的单篇长文摘要，自动提纯卢曼式的原子知识卡片，依托智能选题雷达主动碰撞出高传播价值的选题大纲；
 - 🔌 **原生 MCP 协议底座**：开放标准双模 MCP（Model Context Protocol）接口，让 Cursor、Claude Desktop、Dify 等外部 Agent 能够直接以你的私有知识库为思考基座。
 
@@ -38,26 +38,26 @@
 ## 🏭 端到端内容生产流水线
 
 ```
-速记 · 网页剪藏 · PDF / 文本导入
+快速笔记 · 网页剪藏 · PDF / 文本导入
                │
                ▼
-       统一本地知识库 (FTS5 全文索引)
+       统一本地知识库 (/knowledge)
                │
                ▼
   原子永久卡片提纯 (Claim · Cut · Mechanism · Boundary)
                │
                ▼
-    智能选题雷达 (Topic Radar)
+    智能选题雷达 (/topics)
   ┌────────────────────────────────────────────────────────┐
   │ 知识簇语义聚合 ➔ 3 选 1 标题矩阵 ➔ 锚定卡片骨架大纲    │
   └──────────────────────────┬─────────────────────────────┘
                              │
                              ▼
-                  双栏沉浸创作工坊 (/workshop)
+                  沉浸创作工坊 (/workshop)
                  ┌───────────────────────────┐
                  │ 左栏：原料抽屉与卡片引用   │
                  │ 中间：流式起草与划词智鉴   │
-                 │ 底栏：平台技能与音色挂载   │
+                 │ 顶栏：创作技能与文风挂载   │
                  └─────────────┬─────────────┘
                                │
             ┌──────────────────┴──────────────────┐
@@ -65,7 +65,7 @@
 一键派生多平台版本 (微信 / 小红书 / 知乎 / X)     外部 Agent 协同 (/mcp 接口)
             │                                     │
             ▼                                     ▼
-      成果库 (/works)                     Claude / Cursor / Dify 知识底座
+      成品库 (/works)                     Claude / Cursor / Dify 知识底座
 ```
 
 ---
@@ -74,8 +74,8 @@
 
 ### 1. 多源素材采集与统一知识库
 
-- **闪念速记**：首页即开即记，支持快捷键 `Ctrl / ⌘ + Enter` 瞬时入库；
-- **多源汇聚**：支持富文本粘贴、网页正文智能提取、PDF 文档导入与 Chrome / Edge 浏览器剪藏插件；
+- **快速笔记**：首页即开即记，支持快捷键 `Ctrl / ⌘ + Enter` 瞬时入库；
+- **多源汇聚**：支持富文本粘贴、网页正文智能提取、PDF 文档导入与 Chrome / Edge 浏览器剪藏扩展；
 - **自研 Markdown 编辑器**：支持双栏实时预览，内置**划词 AI 智鉴**（对选中文本进行拓宽、质疑、评估、精校四维研判）。
 
 ### 2. 原子知识卡片提纯 (`/cards`)
@@ -105,7 +105,7 @@ AI 自动将入库笔记精炼萃取为标准的原子永久卡片：
 - **双模通信支持**：
   - **SSE 模式 (`GET /mcp`)**：符合标准 Server-Sent Events 协议，适用于长连接 Agent 交互；
   - **Direct JSON-RPC 模式 (`POST /mcp`)**：支持标准无状态 JSON-RPC 2.0 单次调用；
-- **4 大内置 Tools**：`search_cards_by_query`（意图加权检索引擎）、`get_card_detail`（卡片详情）、`list_topics`（选题库）、`list_recent_works`（作品库）；
+- **4 大内置 Tools**：`search_cards_by_query`（意图加权检索引擎）、`get_card_detail`（卡片详情）、`list_topics`（选题库）、`list_recent_works`（成品库）；
 - **安全鉴权机制**：内置基于 SHA-256 的 API Key 管理看板，每次调用自动记录活跃审计。
 
 ---
@@ -114,19 +114,27 @@ AI 自动将入库笔记精炼萃取为标准的原子永久卡片：
 
 ### 方式 1：使用 Docker Compose（推荐生产部署）
 
-墨匠提供了基于 **Alpine Linux (`node:22-alpine`)** 构建的轻量容器镜像，内置健康检查与数据持久化：
+墨匠提供了基于 **Alpine Linux (`node:22-alpine`)** 构建的轻量容器镜像，内置健康检查与数据持久化。默认配置直接拉取 GitHub 官方预编译镜像（`ghcr.io/dxer/inkcraft`），无需本地构建：
 
 ```bash
 # 1. 克隆代码仓库
 git clone https://github.com/dxer/InkCraft.git
 cd InkCraft
 
-# 2. 一键启动服务
+# 2. 一键启动服务（拉取官方预编译镜像）
 docker compose up -d
 
 # 3. 查看运行状态
 docker compose ps
 ```
+
+**本地编译源码**（开发调试或自定义修改后自用）改用编译版配置：
+
+```bash
+docker compose -f docker-compose.build.yml up -d --build
+```
+
+> 两个 compose 文件共用同一个具名卷 `inkcraft_sqlite_data`，随时互换，数据不丢。预编译镜像默认追踪 main 分支最新构建，也可在 `docker-compose.yml` 中固定到某次提交（如 `ghcr.io/dxer/inkcraft:sha-63b92f2`）。
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000) 即可开始使用。
 
@@ -137,7 +145,8 @@ docker compose ps
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `TZ` | `Asia/Shanghai` | 容器时区 |
-| `ACCESS_PASSWORD` | *(留空)* | 站点访问口令。留空则首次访问时在登录页引导设置访问口令（落库持久化） |
+| `ACCESS_PASSWORD` | *(留空)* | 站点访问口令。留空则首次访问时在登录页引导设置访问口令（落库持久化）；忘记口令时设置此项即可覆盖登入 |
+| `TRUST_PROXY` | *(未设置)* | 反向代理（nginx/Caddy 等）部署时设为 `true`：登录限流采信真实客户端 IP、Cookie Secure 标记采信 X-Forwarded-Proto；直连部署保持默认（代理头可被伪造） |
 | `INKCRAFT_DB_PATH` | `/app/data/inkcraft.sqlite` | SQLite 数据文件持久化路径 |
 
 > **💡 模型配置**：启动后，登录后台前往 **「系统设置」(`/settings`)** 页面，即可可视化添加任意 OpenAI 兼容服务（如 DeepSeek、OpenAI、Ollama 等）并分配通道。
@@ -206,14 +215,25 @@ pnpm start
 
 | 路径 | 模块 | 核心功能 |
 | --- | --- | --- |
-| `/` | 闪念速记 | 快速记录灵感、多标签过滤与素材溯源 |
-| `/cards` | 知识卡片 | 原子永久卡片看板、紧凑表格与关联拓扑图谱 |
-| `/topics` | 选题雷达 | 知识簇碰撞策划、3 选 1 标题矩阵与大纲开写 |
-| `/workshop` | 创作工坊 | 双栏原料工作台、文风音色挂载与多平台一键派生 |
-| `/knowledge` | 全部笔记 | 多知识库画廊与三栏 Markdown 编辑工作台 |
-| `/works` | 作品陈列馆 | 正式成稿母篇与跨平台变体沉淀收录 |
-| `/agents` | 创作技能 | 编辑部创作技能与文生图工位管理 |
-| `/settings` | 系统设置 | 模型通道配置、文风档案克隆、MCP 密钥与剪藏插件 |
+| `/` | 快速笔记 (The Stream) | 快速记录灵感、多标签过滤与素材溯源 |
+| `/knowledge` | 知识库 (The Archives) | 专题知识库管理与多栏 Markdown 编辑工作台 |
+| `/cards` | 知识卡片 (The Cards) | 原子永久卡片看板、紧凑清单与关联拓扑图谱 |
+| `/topics` | 选题雷达 (The Radar) | 知识簇碰撞策划、3 选 1 标题矩阵与大纲开写 |
+| `/workshop` | 创作工坊 (The Workshop) | 双栏原料工作台、文风音色挂载与多平台一键派生 |
+| `/works` | 成品库 (The Showcase) | 正式成稿母篇与跨平台变体沉淀收录 |
+| `/agents` | 创作技能 (The Skills) | 创作技能与专家人格准则配置 |
+| `/settings` | 系统设置 (The Config) | 模型通道配置、文风档案克隆、MCP 密钥与剪藏插件 |
+
+---
+
+## 🧩 浏览器剪藏扩展 (Chrome / Edge)
+
+墨匠内置了基于 Manifest V3 的官方浏览器扩展（位于 `extension/` 目录）：
+
+1. **编译扩展**：在 `extension` 目录下执行 `pnpm build`（生成 `extension/dist` 产物）；
+2. **加载扩展**：打开 Chrome / Edge 的扩展管理页（`chrome://extensions/`），开启「开发者模式」，点击「加载已解压的扩展程序」，选择 `extension/dist` 目录；
+3. **配置连接**：点击扩展图标，填写墨匠服务地址（如 `http://localhost:3000`）和 API Key（在 Web 端「系统设置 ➔ 浏览器剪藏扩展」中生成）；
+4. **一键剪藏**：浏览网页时支持**全页文章采集**、**划词选中采集**以及**页内区域框选剪藏**，并可指定保存的目标知识库。
 
 ---
 
@@ -223,7 +243,7 @@ pnpm start
 | --- | --- |
 | `⌘ / Ctrl + K` | 全局快速搜索（笔记 / 知识库 / 作品） |
 | `⌘ / Ctrl + J` | 知识库 AI 智能问答（精准定位引用源） |
-| `⌘ / Ctrl + Enter` | 首页速记瞬时入库 |
+| `⌘ / Ctrl + Enter` | 首页快速笔记瞬时入库 |
 | `⌘ / Ctrl + S` | 保存当前正在编辑的笔记 |
 | 编辑器选中文字 | 呼出划词 AI 智鉴（拓宽 / 质疑 / 评估 / 精校） |
 

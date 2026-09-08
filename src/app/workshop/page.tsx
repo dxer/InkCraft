@@ -284,7 +284,6 @@ function WorkshopContent() {
     return (
       <TopicInspirationView
         onSelectTopic={handleSelectTopicFromInspiration}
-        initialSkill={skillParam || "wechat"}
       />
     );
   }

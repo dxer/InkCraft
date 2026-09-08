@@ -20,10 +20,9 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import { StageBadge, platformTint } from "@/components/badges";
 import { Button } from "@/components/ui/button";
-import { AiCoverDialog } from "@/components/workshop/ai-cover-dialog";
 import { QuoteCardDialog } from "@/components/workshop/quote-card-dialog";
 import { SaveToKbDialog } from "@/components/workshop/save-to-kb-dialog";
 import { copyWeChatRichText } from "@/lib/wechat-format";
@@ -66,7 +65,6 @@ export default function WorkDetailPage() {
   const [wechatCopied, setWechatCopied] = useState(false);
   const [saveToKbOpen, setSaveToKbOpen] = useState(false);
   const [quoteCardOpen, setQuoteCardOpen] = useState(false);
-  const [coverOpen, setCoverOpen] = useState(false);
 
   useEffect(() => {
     if (!workId) return;
@@ -91,7 +89,7 @@ export default function WorkDetailPage() {
   const renderedHtml = useMemo(() => {
     if (!currentText.trim()) return "";
     try {
-      return marked.parse(currentText, { gfm: true, breaks: true }) as string;
+      return renderMarkdown(currentText);
     } catch {
       return currentText;
     }
@@ -367,17 +365,6 @@ export default function WorkDetailPage() {
         }
         sourceTitle={work.title}
         topicTitle={work.selectedTopic?.title || ""}
-      />
-
-      {/* AI 动态生成微信公众号 SVG 封面对话框 */}
-      <AiCoverDialog
-        open={coverOpen}
-        onOpenChange={setCoverOpen}
-        title={work.title}
-        angle={work.selectedTopic?.angle || ""}
-        hook={work.selectedTopic?.hook || ""}
-        summary={currentText.slice(0, 200)}
-        category="深度思考"
       />
     </div>
   );

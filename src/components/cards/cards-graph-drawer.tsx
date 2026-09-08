@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import React, { useMemo, useState } from "react";
-import { marked } from "marked";
+import { renderMarkdown } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatCardDate, type ParsedCardItem } from "./card-utils";
@@ -56,7 +56,7 @@ export function CardsGraphDrawer({
   const htmlBody = useMemo(() => {
     if (!card?.body) return "";
     try {
-      return marked.parse(card.body, { gfm: true, breaks: true }) as string;
+      return renderMarkdown(card.body);
     } catch {
       return card.body;
     }
