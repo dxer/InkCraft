@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // better-sqlite3 是原生模块，pdf-parse / pdfjs-dist 在 Node 服务端执行，排除出 Turbopack 打包流程
   serverExternalPackages: ["better-sqlite3", "pdf-parse", "pdfjs-dist"],
+  outputFileTracingIncludes: {
+    "/**": [
+      "./node_modules/better-sqlite3/**/*",
+      "./node_modules/pdf-parse/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+    ],
+  },
   allowedDevOrigins: devOriginsFromEnv,
 };
 
