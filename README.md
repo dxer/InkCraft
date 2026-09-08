@@ -134,7 +134,7 @@ docker compose ps
 docker compose -f docker-compose.build.yml up -d --build
 ```
 
-> 两个 compose 文件共用同一个具名卷 `inkcraft_sqlite_data`，随时互换，数据不丢。预编译镜像默认追踪 main 分支最新构建，也可在 `docker-compose.yml` 中固定到某次提交（如 `ghcr.io/dxer/inkcraft:sha-63b92f2`）。
+> 两个 compose 文件均默认挂载同级 `./data` 目录进行持久化，随时互换且数据直观可见。预编译镜像默认追踪 main 分支最新构建，也可在 `docker-compose.yml` 中固定到某次提交。
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000) 即可开始使用。
 

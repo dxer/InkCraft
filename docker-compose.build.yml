@@ -4,7 +4,7 @@
 # 用法：docker compose -f docker-compose.build.yml up -d --build
 # 适合开发调试或改完源码自用；多数用户请直接用默认的 docker-compose.yml
 # （拉取 ghcr.io/dxer/inkcraft 预编译镜像，无需本地构建）。
-# 两个文件共用同一个具名卷 inkcraft_sqlite_data，随时互换数据不丢。
+# 两个文件共用同级 ./data 目录持久化，随时互换数据不丢。
 # ============================================================
 
 services:
@@ -30,8 +30,8 @@ services:
       # 注意：大模型提供商与 API Key 不在环境变量/配置文件中配置，
       # 部署启动后请直接访问网页后台「系统设置 (/settings)」页面可视化添加并分配通道。
     volumes:
-      # SQLite 数据文件持久化挂载（保存所有知识库、卡片、模型设置、选题与成果）
-      - inkcraft_data:/app/data
+      # 直接挂载到 docker-compose.build.yml 所在同级目录的 ./data 文件夹（方便备份与迁移）
+      - ./data:/app/data
     healthcheck:
       # /login 为免鉴权公开路径；/api/settings 在门禁开启后返回 401，会导致永远 unhealthy
       test: ["CMD-SHELL", "curl -f http://localhost:3000/login || exit 1"]
@@ -39,7 +39,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-
-volumes:
-  inkcraft_data:
-    name: inkcraft_sqlite_data
