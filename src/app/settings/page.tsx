@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { VoiceProfile } from "@/app/api/voices/route";
+import { generateId } from "@/lib/utils";
 
 type TabId = "models" | "voices" | "mcp" | "extension" | "export" | "security";
 
@@ -135,7 +136,7 @@ const PROVIDER_PRESETS = [
 
 function newProvider(): ProviderDraft {
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     name: "新提供商",
     baseUrl: "",
     apiKey: "",

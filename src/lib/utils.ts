@@ -1,6 +1,23 @@
 export { cn } from "cn";
 
 /**
+ * 安全生成 UUID / 唯一标识符。
+ * 兼容浏览器非安全上下文（如 HTTP IP 局域网访问时 window.crypto.randomUUID 为 undefined 的场景）。
+ */
+export function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try {
+      return crypto.randomUUID();
+    } catch {}
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
  * Markdown 正文可见字数（粗略）：剥代码块 / 行内代码 / 链接 / 标题 / 强调标记后
  * 统计非空白字符数。用于字数统计场景（成果列表等），不追求逐字节精确。
  */
