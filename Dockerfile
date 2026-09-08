@@ -28,8 +28,8 @@ RUN pnpm build
 
 # 4. 生产运行阶段（仅包含 Node 运行时与 Standalone 极简产物）
 FROM node:22-alpine AS runner
-# 安装运行时工具（ca 证书、时区支持、curl 用于容器健康检查、libc6 兼容层）
-RUN apk add --no-cache ca-certificates tzdata curl libc6-compat
+# 安装运行时工具（ca 证书、时区支持、curl 用于容器健康检查、libc6 兼容层、su-exec 权限管理）
+RUN apk add --no-cache ca-certificates tzdata curl libc6-compat su-exec
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -38,17 +38,12 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV TZ="Asia/Shanghai"
 
-# 准备持久化数据目录并赋予非 root 权限
-RUN mkdir -p /app/data && \
-    chown -R node:node /app/data
-
 # 复制 Next.js Standalone 最小独立产物与静态资源
-COPY --from=builder --chown=node:node /app/public ./public
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-
-# 切换为安全非 root 用户
-USER node
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 3000
 
@@ -59,4 +54,5 @@ VOLUME ["/app/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3000/login || exit 1
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
