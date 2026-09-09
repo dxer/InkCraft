@@ -114,12 +114,14 @@ AI 自动将入库笔记精炼萃取为标准的原子永久卡片：
 
 ---
 
-## 🧩 浏览器剪藏扩展插件 (Chrome / Edge)
+## 🧩 墨匠剪藏扩展插件 (InkCraft Clipper)
 
-墨匠配备了专用的浏览器剪藏插件，支持一键将文章、推文和网页选区沉淀入知识库：
+墨匠配备了专用的浏览器剪藏插件（Chrome / Edge），支持一键将文章、推文和网页选区沉淀入知识库：
 
-1. **直接下载**：在 GitHub 仓库的 **Releases** 或 **Actions Artifacts** 页面直接下载预编译好的 `inkcraft-extension.zip` 并解压；
-2. **本地加载**：打开 Chrome / Edge 浏览器，进入 `chrome://extensions/`，开启右上角「开发者模式」，点击「加载已解压的扩展程序」，选择解压后的目录即可；
+1. **直接下载**：在 GitHub 仓库的 **Releases** 或 **Actions Artifacts** 页面直接下载预编译好的 `inkcraft-clipper.zip` 或 `inkcraft-clipper.crx`；
+2. **安装方式**：
+   - **方式 A（解压加载，推荐）**：解压 `inkcraft-clipper.zip`，打开 Chrome / Edge 浏览器进入 `chrome://extensions/`，开启右上角「开发者模式」，点击「加载已解压的扩展程序」并选择解压目录；
+   - **方式 B（CRX 拖拽）**：打开 `chrome://extensions/` 页面，将 `inkcraft-clipper.crx` 直接拖入窗口安装；
 3. **连接墨匠**：在插件弹窗中填入墨匠服务地址（如 `http://localhost:3000`）并完成连通测试。
 
 > **本地自行构建插件**：在根目录下执行 `pnpm build:extension`，构建产物将输出在 `extension/dist`。

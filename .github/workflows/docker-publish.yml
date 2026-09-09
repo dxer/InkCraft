@@ -77,7 +77,7 @@ jobs:
 
   # ================= Job 2: 构建并打包浏览器剪藏扩展插件 =================
   build-extension:
-    name: Build Browser Extension
+    name: Build Browser Clipper Extension
     runs-on: ubuntu-latest
     permissions:
       contents: write # 允许上传 assets 到 GitHub Releases
@@ -104,22 +104,31 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
 
-      - name: 打包扩展产物为 Zip 压缩包
+      - name: 打包扩展为 Zip 和 CRX 格式
         run: |
+          # 1. 产出 Zip 压缩包（适合解压后直接加载文件夹）
           cd extension/dist
-          zip -r ../../inkcraft-extension.zip .
+          zip -r ../../inkcraft-clipper.zip .
+          cd ../..
+
+          # 2. 使用 crx3 打包 CRX 文件（适合直接拖拽安装）
+          npx --yes crx3 -o inkcraft-clipper.crx extension/dist
 
       - name: 上传扩展产物 (GitHub Actions Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: inkcraft-extension
-          path: inkcraft-extension.zip
+          name: inkcraft-clipper
+          path: |
+            inkcraft-clipper.zip
+            inkcraft-clipper.crx
           retention-days: 30
 
       - name: 挂载到 GitHub Release 附件 (仅发布 Tag 时自动关联)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: inkcraft-extension.zip
+          files: |
+            inkcraft-clipper.zip
+            inkcraft-clipper.crx
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
