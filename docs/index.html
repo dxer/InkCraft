@@ -7,10 +7,12 @@
   <meta name="description" content="墨匠 (InkCraft) - 面向深度创作者的本地优先 AI 创作中枢。融合卢曼原子卡片盒、智能选题雷达、全渠道文风克隆与 9 大 MCP 开放协议。" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m12 19 7-7 3 3-7 7-3-3z'/><path d='m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/><path d='m2 2 7.586 7.586'/><circle cx='11' cy='11' r='2'/></svg>" />
   
-  <!-- 字体与 Tailwind CDN -->
+  <!-- 字体预加载 -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700;900&display=swap" rel="stylesheet" />
+  
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -26,13 +28,14 @@
             ink: {
               50: '#f8fafc',
               100: '#f1f5f9',
-              800: '#1e222d',
-              900: '#0f1117',
-              950: '#07080b',
+              800: '#141824',
+              850: '#0f121a',
+              900: '#0a0c10',
+              950: '#06070a',
             },
-            amber: {
-              500: '#f59e0b',
+            gold: {
               400: '#fbbf24',
+              500: '#f59e0b',
               600: '#d97706',
             }
           }
@@ -41,35 +44,41 @@
     }
   </script>
   <style>
-    /* 自定义美学样式 */
+    /* 核心背景与美学质感 */
     body {
-      background-color: #08090d;
-      color: #e2e8f0;
+      background-color: #06070a;
+      color: #cbd5e1;
     }
-    .bg-radial-glow {
-      background: radial-gradient(circle at 50% -20%, rgba(245, 158, 11, 0.15), rgba(8, 9, 13, 0) 70%);
+    .bg-grid-pattern {
+      background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: 32px 32px;
     }
-    .glass-card {
-      background: rgba(22, 25, 35, 0.65);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.07);
+    .hero-glow {
+      background: radial-gradient(circle at 50% 10%, rgba(245, 158, 11, 0.14) 0%, rgba(217, 119, 6, 0.04) 40%, rgba(6, 7, 10, 0) 75%);
     }
-    .glass-card:hover {
-      border-color: rgba(245, 158, 11, 0.25);
+    .glass-surface {
+      background: rgba(15, 18, 26, 0.7);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .gradient-text {
-      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
+    .glass-surface:hover {
+      border-color: rgba(245, 158, 11, 0.3);
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5), 0 0 20px 0 rgba(245, 158, 11, 0.05);
+    }
+    .text-title-gradient {
+      background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 45%, #94a3b8 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    .amber-gradient-text {
-      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+    .text-amber-gradient {
+      background: linear-gradient(135deg, #fde68a 0%, #f59e0b 50%, #d97706 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
     .code-scroll::-webkit-scrollbar {
       height: 6px;
+      width: 6px;
     }
     .code-scroll::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.15);
@@ -79,14 +88,15 @@
 </head>
 <body class="antialiased selection:bg-amber-500/20 selection:text-amber-300 min-h-screen relative overflow-x-hidden">
 
-  <!-- 顶部背景光晕 -->
-  <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-radial-glow pointer-events-none -z-10"></div>
+  <!-- 顶部微光与网格背景 -->
+  <div class="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none"></div>
+  <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] hero-glow pointer-events-none -z-10"></div>
 
   <!-- 导航栏 -->
-  <header class="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-ink-950/80 backdrop-blur-md">
+  <header class="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-ink-950/85 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <a href="#" class="flex items-center gap-3 group">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m12 19 7-7 3 3-7 7-3-3z"/>
             <path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
@@ -94,19 +104,19 @@
             <circle cx="11" cy="11" r="2"/>
           </svg>
         </div>
-        <span class="font-serif font-bold text-lg text-white tracking-wide">墨匠 <span class="text-xs font-sans font-normal tracking-widest text-amber-400/90 ml-1 uppercase">InkCraft</span></span>
+        <span class="font-serif font-bold text-lg text-white tracking-wide">墨匠 <span class="text-xs font-sans font-medium tracking-widest text-amber-400/90 ml-1 uppercase">InkCraft</span></span>
       </a>
 
       <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
         <a href="#features" class="hover:text-amber-400 transition-colors">核心特性</a>
-        <a href="#workflow" class="hover:text-amber-400 transition-colors">工作流</a>
+        <a href="#showcase" class="hover:text-amber-400 transition-colors">工坊演示</a>
         <a href="#mcp" class="hover:text-amber-400 transition-colors">MCP 第二大脑</a>
         <a href="#clipper" class="hover:text-amber-400 transition-colors">剪藏插件</a>
         <a href="#quickstart" class="hover:text-amber-400 transition-colors">快速部署</a>
       </nav>
 
       <div class="flex items-center gap-3">
-        <a href="https://github.com/dxer/InkCraft" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-white/10 hover:border-amber-500/40 bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium text-slate-200 transition-all">
+        <a href="https://github.com/dxer/InkCraft" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-white/10 hover:border-amber-500/40 bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-slate-200 transition-all">
           <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
             <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
           </svg>
@@ -117,57 +127,57 @@
   </header>
 
   <!-- Hero 头部区域 -->
-  <section class="relative pt-20 pb-24 md:pt-32 md:pb-36 overflow-hidden">
+  <section class="relative pt-20 pb-20 md:pt-28 md:pb-32 overflow-hidden">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       
       <!-- 标签 Badge -->
-      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-medium mb-8">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-medium mb-8">
         <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
         本地优先 · 现代自媒体内容创作大脑
       </div>
 
       <!-- 主标题 -->
-      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-serif font-bold tracking-tight mb-6">
-        <span class="gradient-text">拒绝零散碎片堆砌</span><br/>
-        <span class="amber-gradient-text">让知识真正炼化为爆款创作</span>
+      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-serif font-bold tracking-tight mb-6 leading-[1.15]">
+        <span class="text-title-gradient">拒绝零散碎片堆砌</span><br/>
+        <span class="text-amber-gradient">让知识真正炼化为爆款创作</span>
       </h1>
 
       <!-- 副标题 -->
       <p class="max-w-3xl mx-auto text-base sm:text-lg text-slate-400 font-normal leading-relaxed mb-10">
-        墨匠 (InkCraft) 专为深度创作者与知识工程师打造。将网页剪藏与笔记萃取为高密度的<strong class="text-slate-200">原子永久卡片</strong>，通过<strong class="text-slate-200">智能选题雷达</strong>激荡碰撞出 3 选 1 标题与大纲，并一键克隆文风派生至微信公众号、小红书、知乎与 X。
+        墨匠 (InkCraft) 将海量网页剪藏与随手笔记，智能萃取为高密度的<strong class="text-slate-200 font-medium">原子永久卡片</strong>。通过<strong class="text-slate-200 font-medium">智能选题雷达</strong>激荡碰撞出爆款标题与结构化大纲，并一键克隆文风派生至微信公众号、小红书、知乎与 X。
       </p>
 
       <!-- 快速行动 CTA -->
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-        <a href="#quickstart" class="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+        <a href="#quickstart" class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-sm transition-all shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
           一键 Docker 启动
         </a>
-        <a href="#mcp" class="w-full sm:w-auto px-7 py-3.5 rounded-xl border border-white/10 hover:border-amber-500/30 bg-white/[0.04] hover:bg-white/[0.08] text-white font-medium text-sm transition-all flex items-center justify-center gap-2">
+        <a href="#mcp" class="w-full sm:w-auto px-8 py-3.5 rounded-xl border border-white/10 hover:border-amber-500/40 bg-white/[0.03] hover:bg-white/[0.08] text-white font-medium text-sm transition-all flex items-center justify-center gap-2">
           <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
-          连接 Claude/Cursor (MCP)
+          连接 Claude / Cursor (MCP)
         </a>
       </div>
 
-      <!-- 交互式代码/终端演示卡片 -->
-      <div class="max-w-4xl mx-auto rounded-2xl border border-white/10 bg-[#0d0f15]/90 p-4 sm:p-6 text-left shadow-2xl shadow-black/80 font-mono text-xs sm:text-sm">
+      <!-- 交互式终端卡片 -->
+      <div class="max-w-4xl mx-auto rounded-2xl border border-white/10 bg-[#0d0f17]/95 p-5 sm:p-7 text-left shadow-2xl shadow-black/90 font-mono text-xs sm:text-sm">
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.08]">
           <div class="flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
             <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
             <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
-            <span class="ml-2 text-xs text-slate-500">Terminal · 10 秒极速部署</span>
+            <span class="ml-2 text-xs text-slate-400">Terminal · 10 秒极速部署</span>
           </div>
-          <button onclick="copyCode('docker-cmd', this)" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1 transition-colors">
+          <button onclick="copyCode('docker-cmd', this)" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
             <span class="copy-label">复制命令</span>
           </button>
         </div>
-        <pre class="code-scroll overflow-x-auto text-slate-300 leading-relaxed"><code id="docker-cmd"><span class="text-amber-400"># 1. 克隆代码并一键启动</span>
+        <pre class="code-scroll overflow-x-auto text-slate-300 leading-relaxed"><code id="docker-cmd"><span class="text-slate-500"># 1. 克隆代码并一键启动（自动拉取官方轻量 ~180MB 镜像）</span>
 git clone https://github.com/dxer/InkCraft.git && cd InkCraft
 docker compose up -d
 
-<span class="text-amber-400"># 2. 访问创作工坊</span>
+<span class="text-slate-500"># 2. 打开浏览器访问创作工坊</span>
 open http://localhost:3000</code></pre>
       </div>
 
@@ -175,63 +185,216 @@ open http://localhost:3000</code></pre>
   </section>
 
   <!-- 传统笔记 vs 墨匠工坊对比 -->
-  <section class="py-20 border-t border-white/[0.06] bg-ink-950/40">
+  <section class="py-20 border-t border-white/[0.06] bg-ink-950/60">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center max-w-3xl mx-auto mb-16">
         <h2 class="text-2xl sm:text-3xl font-serif font-bold text-white mb-4">为什么你需要全新的创作范式？</h2>
-        <p class="text-slate-400 text-sm sm:text-base">告别“收藏从未阅读、AI 生成尽是套话”的死循环。</p>
+        <p class="text-slate-400 text-sm sm:text-base">告别“收藏从未阅读、AI 生成尽是套话”的传统死循环。</p>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         <!-- 传统模式 -->
-        <div class="p-8 rounded-2xl border border-rose-500/20 bg-rose-500/[0.02] text-left">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold">✕</div>
-            <h3 class="text-lg font-semibold text-rose-300">传统知识库与通用 AI</h3>
+        <div class="p-8 rounded-2xl border border-rose-500/20 bg-rose-500/[0.03] text-left flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </div>
+              <h3 class="text-lg font-semibold text-rose-300">传统笔记软件与通用 AI</h3>
+            </div>
+            <ul class="space-y-4 text-sm text-slate-400">
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-2 shrink-0"></span>
+                <span><strong>信息死孤岛</strong>：存了数百篇公众号和书签，但动笔时根本想不起来，搜索只能搜出机械关键词。</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-2 shrink-0"></span>
+                <span><strong>AI 八股文假大空</strong>：直接让大模型写文章，产出全都是“随着数字化发展”、“我们要提升认知”的平庸套话。</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mt-2 shrink-0"></span>
+                <span><strong>排版与分发折磨</strong>：写完母稿后，花大量时间手动调整公众号内联样式、知乎格式、小红书标签。</span>
+              </li>
+            </ul>
           </div>
-          <ul class="space-y-4 text-sm text-slate-400">
-            <li class="flex items-start gap-3">
-              <span class="text-rose-400 shrink-0">●</span>
-              <span><strong>信息死孤岛</strong>：存了数百篇公众号和书签，但动笔时根本想不起来，搜索只能搜出机械关键词。</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="text-rose-400 shrink-0">●</span>
-              <span><strong>AI 八股文假大空</strong>：直接让大模型写文章，产出全都是“随着数字化发展”、“我们要提升认知”的平庸套话。</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="text-rose-400 shrink-0">●</span>
-              <span><strong>排版与分发折磨</strong>：写完母稿后，花大量时间手动调整公众号内联样式、知乎格式、小红书标签。</span>
-            </li>
-          </ul>
+          <div class="mt-8 pt-4 border-t border-rose-500/10 text-xs text-rose-400/80">结果：素材越积越多，产出越来越慢</div>
         </div>
 
         <!-- 墨匠模式 -->
-        <div class="p-8 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/[0.06] to-transparent text-left relative overflow-hidden">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">✓</div>
-            <h3 class="text-lg font-semibold text-amber-300">墨匠 (InkCraft) 创作工坊</h3>
+        <div class="p-8 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/[0.07] to-transparent text-left flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <h3 class="text-lg font-semibold text-amber-300">墨匠 (InkCraft) 现代创作工坊</h3>
+            </div>
+            <ul class="space-y-4 text-sm text-slate-300">
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0"></span>
+                <span><strong>原子因果永久卡片</strong>：AI 提炼断言命题 (Claim)、深层机理 (Mechanism) 与失效边界 (Boundary)，建立网状思维。</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0"></span>
+                <span><strong>选题雷达主动碰撞</strong>：反常识冲突、跨界同构、专题纵深，自动生成 3 选 1 爆款标题矩阵与结构化大纲。</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0"></span>
+                <span><strong>个人文风克隆与全渠道派生</strong>：学习创作者语感音色，一键生成微信公众号精美内联排版与小红书等平台格式。</span>
+              </li>
+            </ul>
           </div>
-          <ul class="space-y-4 text-sm text-slate-300">
-            <li class="flex items-start gap-3">
-              <span class="text-amber-400 shrink-0">●</span>
-              <span><strong>原子因果永久卡片</strong>：AI 提炼断言命题 (Claim)、深层机理 (Mechanism) 与失效边界 (Boundary)，建立网状思维。</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="text-amber-400 shrink-0">●</span>
-              <span><strong>选题雷达主动碰撞</strong>：反常识冲突、跨界同构、专题纵深，自动生成 3 选 1 爆款标题矩阵与结构化大纲。</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="text-amber-400 shrink-0">●</span>
-              <span><strong>个人文风克隆与全渠道派生</strong>：学习创作者语感音色，一键生成微信公众号精美内联排版与小红书等平台格式。</span>
-            </li>
-          </ul>
+          <div class="mt-8 pt-4 border-t border-amber-500/20 text-xs text-amber-400">结果：沉睡知识自动唤醒，高质量创作源源不断</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 核心特性网格 -->
-  <section id="features" class="py-24 border-t border-white/[0.06]">
+  <!-- 交互式产品核心体验演示 (Showcase) -->
+  <section id="showcase" class="py-24 border-t border-white/[0.06]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <div class="max-w-3xl mx-auto mb-12">
+        <h2 class="text-3xl font-serif font-bold text-white mb-4">沉浸式工作流深度体验</h2>
+        <p class="text-slate-400 text-sm sm:text-base">从卡片提纯、灵感碰撞到母稿派生与 MCP 智能协同。</p>
+      </div>
+
+      <!-- Tab 切换按钮 -->
+      <div class="inline-flex p-1.5 rounded-xl bg-ink-900 border border-white/10 mb-10 overflow-x-auto max-w-full">
+        <button onclick="switchTab('tab-card', this)" class="tab-btn px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all bg-amber-500 text-slate-950 font-semibold shadow-sm">
+          01. 原子永久卡片
+        </button>
+        <button onclick="switchTab('tab-radar', this)" class="tab-btn px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-slate-400 hover:text-white">
+          02. 智能选题雷达
+        </button>
+        <button onclick="switchTab('tab-workshop', this)" class="tab-btn px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-slate-400 hover:text-white">
+          03. 创作工坊与排版
+        </button>
+        <button onclick="switchTab('tab-mcp', this)" class="tab-btn px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all text-slate-400 hover:text-white">
+          04. 9 大 MCP 协议
+        </button>
+      </div>
+
+      <!-- Tab 1: 原子卡片展示 -->
+      <div id="tab-card" class="tab-content max-w-4xl mx-auto text-left">
+        <div class="glass-surface p-7 sm:p-9 rounded-2xl border border-amber-500/30 relative">
+          <div class="flex items-center justify-between pb-4 mb-5 border-b border-white/[0.08]">
+            <span class="text-xs px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">原子永久卡片 · Permanent Note</span>
+            <span class="text-xs text-slate-500">card_8f2a10</span>
+          </div>
+          <h3 class="text-lg sm:text-xl font-serif font-bold text-white mb-4 leading-snug">
+            Vibe Coding 的核心杠杆不在代码生成，而在前置软件规范（Spec）的边界锁定
+          </h3>
+          <div class="flex flex-wrap gap-2 mb-6">
+            <span class="text-xs px-2 py-0.5 rounded bg-white/[0.05] text-slate-300">#AI编程</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-white/[0.05] text-slate-300">#认知科学</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-white/[0.05] text-slate-300">#软件架构</span>
+          </div>
+          <div class="space-y-4 text-sm text-slate-300">
+            <div>
+              <div class="text-xs font-mono text-amber-400 font-semibold mb-1">【传播切角 / Hook】</div>
+              <p class="text-slate-300 italic">“很多人以为 Vibe Coding 是靠直觉写代码，最后却变成了靠玄学修 Bug。”</p>
+            </div>
+            <div>
+              <div class="text-xs font-mono text-amber-400 font-semibold mb-1">【深层机理 / Mechanism】</div>
+              <p class="text-slate-400 leading-relaxed">AI 代码模型本质是概率推断器，其生成准确度极度依赖上下文边界的收敛程度。若没有前置固化的软件规范（Spec），模型在多轮对话中会因上下文膨胀而产生逻辑漂移。</p>
+            </div>
+            <div>
+              <div class="text-xs font-mono text-amber-400 font-semibold mb-1">【适用边界与认知误区 / Boundary】</div>
+              <p class="text-slate-400">单文件探索型 Demo 或一次性脚本无需过度编写 Spec；典型误区是把“提示词越短越口语化”当成高效。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: 选题雷达展示 -->
+      <div id="tab-radar" class="tab-content hidden max-w-4xl mx-auto text-left">
+        <div class="glass-surface p-7 sm:p-9 rounded-2xl border border-white/10">
+          <div class="flex items-center justify-between pb-4 mb-5 border-b border-white/[0.08]">
+            <span class="text-xs px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">选题雷达 · 3选1标题矩阵与大纲</span>
+            <span class="text-xs text-emerald-400">契合度评分: 96 🔥 爆款潜质</span>
+          </div>
+          <div class="space-y-3 mb-6">
+            <div class="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-white">
+              <span class="text-amber-400 font-mono text-xs mr-2">方案 A (反常识):</span> 为什么你越努力学提示词，代码写得越烂？
+            </div>
+            <div class="p-3 rounded-lg bg-amber-500/[0.08] border border-amber-500/30 text-sm text-amber-300 font-medium">
+              <span class="text-amber-400 font-mono text-xs mr-2">方案 B (痛点共鸣 - 推荐):</span> Vibe Coding 时代的隐形陷阱：当自然语言变成新的技术债务
+            </div>
+            <div class="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-white">
+              <span class="text-amber-400 font-mono text-xs mr-2">方案 C (实操干货):</span> 从 Spec 到生产就绪：专业工程师的 AI 结对编程闭环指南
+            </div>
+          </div>
+          <div class="text-xs font-mono text-slate-400 mb-2">【结构化递进大纲】：</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+            <div class="p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">1. 假性繁荣：直觉编程带来的短期多巴胺与长期维护灾难</div>
+            <div class="p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">2. 底层机理：上下文窗口污染与概率推断的不可逆逻辑漂移</div>
+            <div class="p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">3. 破局解法：规范优先（Spec-Driven）与测试护栏的工程重构</div>
+            <div class="p-3 rounded-lg bg-white/[0.02] border border-white/[0.05]">4. 认知升级：从代码搬运工到系统边界架构师的跃迁</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: 写作工坊与多端排版 -->
+      <div id="tab-workshop" class="tab-content hidden max-w-4xl mx-auto text-left">
+        <div class="glass-surface p-7 sm:p-9 rounded-2xl border border-white/10">
+          <div class="flex items-center justify-between pb-4 mb-5 border-b border-white/[0.08]">
+            <span class="text-xs px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">创作工坊 · 全渠道转译派生</span>
+            <span class="text-xs text-slate-400">已克隆文风: 深度叙事学者调</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <!-- 微信排版 -->
+            <div class="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <div class="text-xs font-semibold text-emerald-400 mb-3 flex items-center justify-between">
+                <span>微信公众号（内联美化排版）</span>
+                <span class="text-slate-500 font-mono">一键复制即粘贴</span>
+              </div>
+              <div class="text-xs text-slate-300 space-y-3 font-sans leading-relaxed border-l-2 border-amber-500 pl-3">
+                <p class="font-bold text-white">正文破题：</p>
+                <p class="text-slate-400">很多人以为 AI 编程是解放双手，直到第一批尝鲜者在半夜面对几千行毫无注释但全是 Bug 的代码陷入沉思……</p>
+                <p class="text-amber-300">真正的生产力红利，从来不发生在生成代码的那一瞬间。</p>
+              </div>
+            </div>
+            <!-- 小红书排版 -->
+            <div class="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <div class="text-xs font-semibold text-rose-400 mb-3 flex items-center justify-between">
+                <span>小红书笔记（痛点爆款）</span>
+                <span class="text-slate-500 font-mono">自动打标</span>
+              </div>
+              <div class="text-xs text-slate-300 space-y-2 font-sans leading-relaxed">
+                <p class="font-bold text-white">🔥 程序员必须戒掉的 AI 幻觉！</p>
+                <p class="text-slate-400">写代码爽一时，找 Bug 哭一天！分享我用了 3 个月的 Spec 驱动工作流，效率直接翻倍 👉 赶紧马住！</p>
+                <div class="text-slate-500 pt-2">#程序员成长 #AI工具 #效率神器 #编程日常</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 9 大 MCP 协议展示 -->
+      <div id="tab-mcp" class="tab-content hidden max-w-4xl mx-auto text-left">
+        <div class="glass-surface p-7 sm:p-9 rounded-2xl border border-white/10 font-mono text-xs sm:text-sm">
+          <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.08]">
+            <span class="text-xs text-amber-400">Model Context Protocol · 9 大内置只读工具</span>
+            <span class="text-xs text-slate-500">JSON-RPC 2.0 / SSE</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">search_cards_by_query:</span> 意图检索原子卡片</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">get_card_detail:</span> 获取单张/批量卡片全文</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">find_related_cards:</span> 网状概念拓扑关联发现</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">search_documents:</span> 全文检索原始长篇母档</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">get_document_detail:</span> 读取长文原文与卡片回溯</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">list_topics:</span> 灵感雷达与大纲矩阵检索</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">list_recent_works:</span> 历史成稿与文风范文对齐</div>
+            <div class="p-2.5 rounded bg-white/[0.02] border border-white/[0.05]"><span class="text-amber-400">list_tags_and_concepts:</span> 全局认知图谱词云</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 五大核心特性网格 -->
+  <section id="features" class="py-24 border-t border-white/[0.06] bg-ink-950/40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center max-w-3xl mx-auto mb-16">
         <h2 class="text-3xl font-serif font-bold text-white mb-4">五大核心模块，贯通创作全流程</h2>
@@ -241,7 +404,7 @@ open http://localhost:3000</code></pre>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         <!-- 卡片 1 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           </div>
@@ -249,11 +412,11 @@ open http://localhost:3000</code></pre>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
             践行卢曼卡片盒笔记法。每张卡片固化断言命题 (Claim)、底层推导 (Mechanism)、适用边界与潜在概念线索 (Connection Hints)。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">支持瀑布流、紧凑清单与力导向关联图谱</div>
+          <div class="text-xs text-amber-400/90 font-medium">支持瀑布看板、紧凑清单与力导向关联拓扑图谱</div>
         </div>
 
         <!-- 卡片 2 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
           </div>
@@ -261,23 +424,23 @@ open http://localhost:3000</code></pre>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
             通盘研判卡片知识簇。内置反差冲突 (Paradox)、跨界同构 (Intersection) 与专题纵深 (Deep Dive) 碰撞，产出 3 选 1 标题与结构化大纲。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">支持意图检索、排除已读与随机灵感抽样</div>
+          <div class="text-xs text-amber-400/90 font-medium">支持意图检索、排除已读与随机灵感抽样</div>
         </div>
 
         <!-- 卡片 3 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
           </div>
           <h3 class="text-lg font-semibold text-white mb-2">沉浸工坊与文风派生 (`/workshop`)</h3>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
-            双栏原料工作台一边查卡片一边写母稿。录入样稿自动克隆语气语感，一键派生为微信公众号（精美内联样式）、小红书、知乎等平台。
+            双栏原料工作台一边查卡片一边写母稿。录入样稿自动克隆语气语感，一键派生为微信公众号（精美内联排版）、小红书、知乎等平台。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">微信推文一键复制 · 完美内联排版</div>
+          <div class="text-xs text-amber-400/90 font-medium">微信推文一键复制 · 完美内联排版</div>
         </div>
 
         <!-- 卡片 4 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
           </div>
@@ -285,23 +448,23 @@ open http://localhost:3000</code></pre>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
             支持 SSE 与 Direct JSON-RPC 双模协议。为 Claude Desktop、Cursor、智能体提供卡片意图检索、网状关联发现与原始母档双向穿透。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">纯只读安全鉴权 · 创作者专属第二大脑</div>
+          <div class="text-xs text-amber-400/90 font-medium">纯只读安全鉴权 · 创作者专属第二大脑</div>
         </div>
 
         <!-- 卡片 5 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
           </div>
           <h3 class="text-lg font-semibold text-white mb-2">墨匠剪藏扩展插件 (Clipper)</h3>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
-            浏览器专用剪藏助手（Chrome / Edge）。一键将深度文章、推文选区清洗提取为干净 Markdown 并同步入库。
+            Chrome 与 Edge 浏览器的轻量灵感采集利器。一键将文章、推文和网页选区清洗提取为干净 Markdown 并同步入库。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">支持 .zip 解压即用与 .crx 双格式下载</div>
+          <div class="text-xs text-amber-400/90 font-medium">支持 .zip 解压即用与 .crx 双格式下载</div>
         </div>
 
         <!-- 卡片 6 -->
-        <div class="glass-card p-7 rounded-2xl transition-all">
+        <div class="glass-surface p-7 rounded-2xl transition-all">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-5">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
           </div>
@@ -309,7 +472,7 @@ open http://localhost:3000</code></pre>
           <p class="text-sm text-slate-400 leading-relaxed mb-4">
             数据全部存储在本地 SQLite，容器仅 ~180MB。自由绑定 DeepSeek、Claude、OpenAI 或本地 Ollama 模型，密钥落库加密。
           </p>
-          <div class="text-xs text-amber-400/80 font-medium">零云端依赖 · 数据资产 100% 自主掌控</div>
+          <div class="text-xs text-amber-400/90 font-medium">零云端依赖 · 数据资产 100% 自主掌控</div>
         </div>
 
       </div>
@@ -317,7 +480,7 @@ open http://localhost:3000</code></pre>
   </section>
 
   <!-- MCP 第二大脑接入深度介绍 -->
-  <section id="mcp" class="py-24 border-t border-white/[0.06] bg-ink-950/40">
+  <section id="mcp" class="py-24 border-t border-white/[0.06]">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         
@@ -330,7 +493,7 @@ open http://localhost:3000</code></pre>
             接上你的专属知识智囊
           </h2>
           <p class="text-slate-400 text-sm sm:text-base leading-relaxed mb-6">
-            墨匠内置了符合 Anthropic MCP 标准规范的服务端接口。外部 Agent 不再需要读死板的散乱文件，而是通过 <strong>9 大意图工具</strong> 顺藤摸瓜检索论点、探测适用边界与提取成稿范例。
+            墨匠内置符合 Anthropic MCP 标准规范的服务端接口。外部 Agent 不再需要读死板的散乱文件，而是通过 <strong>9 大意图工具</strong> 顺藤摸瓜检索论点、探测适用边界与提取成稿范例。
           </p>
           
           <div class="space-y-3 font-mono text-xs text-slate-300">
@@ -367,7 +530,7 @@ open http://localhost:3000</code></pre>
   </section>
 
   <!-- 剪藏插件下载安装 -->
-  <section id="clipper" class="py-24 border-t border-white/[0.06]">
+  <section id="clipper" class="py-24 border-t border-white/[0.06] bg-ink-950/40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <div class="max-w-3xl mx-auto mb-16">
         <h2 class="text-3xl font-serif font-bold text-white mb-4">墨匠剪藏 · InkCraft Clipper</h2>
@@ -375,23 +538,23 @@ open http://localhost:3000</code></pre>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto text-left">
-        <div class="glass-card p-6 rounded-2xl">
+        <div class="glass-surface p-7 rounded-2xl">
           <div class="text-amber-400 font-serif font-bold text-lg mb-2">01. 下载产物</div>
-          <p class="text-sm text-slate-400 leading-relaxed mb-4">
-            在 GitHub Release 或 Actions 页面直接下载 <code>inkcraft-clipper.zip</code>（解压模式）或 <code>inkcraft-clipper.crx</code>。
+          <p class="text-sm text-slate-400 leading-relaxed">
+            在 GitHub Release 或 Actions 页面直接下载 <code>inkcraft-clipper.zip</code>（推荐解压加载）或 <code>inkcraft-clipper.crx</code>。
           </p>
         </div>
 
-        <div class="glass-card p-6 rounded-2xl">
+        <div class="glass-surface p-7 rounded-2xl">
           <div class="text-amber-400 font-serif font-bold text-lg mb-2">02. 载入浏览器</div>
-          <p class="text-sm text-slate-400 leading-relaxed mb-4">
-            打开 <code>chrome://extensions</code> 开启开发者模式，点击「加载已解压的扩展程序」选择解压目录。
+          <p class="text-sm text-slate-400 leading-relaxed">
+            打开 <code>chrome://extensions</code> 开启右上角「开发者模式」，点击「加载已解压的扩展程序」选择解压目录。
           </p>
         </div>
 
-        <div class="glass-card p-6 rounded-2xl">
+        <div class="glass-surface p-7 rounded-2xl">
           <div class="text-amber-400 font-serif font-bold text-lg mb-2">03. 一键同步</div>
-          <p class="text-sm text-slate-400 leading-relaxed mb-4">
+          <p class="text-sm text-slate-400 leading-relaxed">
             填入你的墨匠服务端地址（如 <code>http://localhost:3000</code>），即可实现浏览时随手一键剪藏。
           </p>
         </div>
@@ -400,7 +563,7 @@ open http://localhost:3000</code></pre>
   </section>
 
   <!-- 快速开始与部署指南 -->
-  <section id="quickstart" class="py-24 border-t border-white/[0.06] bg-ink-950/40">
+  <section id="quickstart" class="py-24 border-t border-white/[0.06]">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center max-w-3xl mx-auto mb-16">
         <h2 class="text-3xl font-serif font-bold text-white mb-4">极速部署，即刻开启创作</h2>
@@ -410,15 +573,15 @@ open http://localhost:3000</code></pre>
       <div class="max-w-4xl mx-auto space-y-6 text-left">
         
         <!-- 方案 1: Docker 部署 -->
-        <div class="glass-card p-6 sm:p-8 rounded-2xl">
+        <div class="glass-surface p-6 sm:p-8 rounded-2xl">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
               方案 A：Docker Compose 生产部署（推荐）
             </h3>
-            <span class="text-xs px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">官方预编译</span>
+            <span class="text-xs px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">官方预编译 · 仅 ~180MB</span>
           </div>
-          <p class="text-sm text-slate-400 mb-4">拉取轻量镜像（~180MB），数据自动持久化到同级 <code>./data</code> 目录：</p>
+          <p class="text-sm text-slate-400 mb-4">拉取轻量镜像，数据自动持久化到同级 <code>./data</code> 目录：</p>
           <div class="rounded-xl border border-white/10 bg-[#090a0f] p-4 font-mono text-xs sm:text-sm">
             <pre class="code-scroll overflow-x-auto text-slate-300"><code><span class="text-amber-400"># 1. 克隆代码</span>
 git clone https://github.com/dxer/InkCraft.git && cd InkCraft
@@ -432,7 +595,7 @@ docker compose ps</code></pre>
         </div>
 
         <!-- 方案 2: 本地源码开发 -->
-        <div class="glass-card p-6 sm:p-8 rounded-2xl">
+        <div class="glass-surface p-6 sm:p-8 rounded-2xl">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-amber-400"></span>
@@ -450,6 +613,54 @@ pnpm dev       <span class="text-slate-500"># 访问 http://localhost:3000</span
     </div>
   </section>
 
+  <!-- 常见问题 FAQ 折叠面板 -->
+  <section class="py-20 border-t border-white/[0.06] bg-ink-950/60">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="text-2xl sm:text-3xl font-serif font-bold text-white mb-3">常见问题解答 (FAQ)</h2>
+        <p class="text-slate-400 text-sm">关于数据隐私、大模型接入与工作流协同。</p>
+      </div>
+
+      <div class="space-y-4 text-left">
+        <details class="group glass-surface p-5 rounded-xl transition-all">
+          <summary class="flex justify-between items-center font-medium cursor-pointer text-white text-sm sm:text-base list-none">
+            <span>我的笔记与卡片数据存储在哪里？安全吗？</span>
+            <span class="transition group-open:rotate-180 text-amber-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+          </summary>
+          <p class="text-slate-400 text-xs sm:text-sm mt-3 leading-relaxed">
+            所有知识库、卡片盒与创作母稿全部存储在本地 SQLite 数据库（Docker 部署时挂载在宿主机 <code>./data/inkcraft.sqlite</code>）。墨匠不上传任何数据到第三方云端，您的知识资产 100% 私有可控。
+          </p>
+        </details>
+
+        <details class="group glass-surface p-5 rounded-xl transition-all">
+          <summary class="flex justify-between items-center font-medium cursor-pointer text-white text-sm sm:text-base list-none">
+            <span>支持接入哪些大模型（LLM）？</span>
+            <span class="transition group-open:rotate-180 text-amber-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+          </summary>
+          <p class="text-slate-400 text-xs sm:text-sm mt-3 leading-relaxed">
+            支持所有遵循 OpenAI 兼容规范的模型接口！您可以在系统设置中自由绑定 DeepSeek、Claude、OpenAI、Kimi、通义千问，或使用本地 Ollama 运行开源模型（如 Qwen2.5、Llama 3 等）。
+          </p>
+        </details>
+
+        <details class="group glass-surface p-5 rounded-xl transition-all">
+          <summary class="flex justify-between items-center font-medium cursor-pointer text-white text-sm sm:text-base list-none">
+            <span>什么是 MCP 协议？我该如何用它连接 Claude Desktop？</span>
+            <span class="transition group-open:rotate-180 text-amber-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </span>
+          </summary>
+          <p class="text-slate-400 text-xs sm:text-sm mt-3 leading-relaxed">
+            MCP (Model Context Protocol) 是 Anthropic 制定的标准化上下文连接协议。墨匠内置了 9 大只读 Tools。在系统设置中生成 API Key 后，将 JSON 配置粘贴进 Claude Desktop 或 Cursor，大模型即可直接在对话中检索你的卡片库和选题。
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- 页脚 -->
   <footer class="border-t border-white/[0.06] bg-ink-950 py-12 text-center text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
@@ -462,7 +673,7 @@ pnpm dev       <span class="text-slate-500"># 访问 http://localhost:3000</span
     </div>
   </footer>
 
-  <!-- 简单复制脚本 -->
+  <!-- 交互脚本：代码复制与 Tab 切换 -->
   <script>
     function copyCode(elementId, btn) {
       const code = document.getElementById(elementId).innerText;
@@ -478,6 +689,22 @@ pnpm dev       <span class="text-slate-500"># 访问 http://localhost:3000</span
           }, 2000);
         }
       });
+    }
+
+    function switchTab(tabId, activeBtn) {
+      // 隐藏所有 Tab 内容
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      // 显示目标 Tab
+      const target = document.getElementById(tabId);
+      if (target) target.classList.remove('hidden');
+
+      // 更新按钮样式
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-amber-500', 'text-slate-950', 'font-semibold', 'shadow-sm');
+        btn.classList.add('text-slate-400');
+      });
+      activeBtn.classList.remove('text-slate-400');
+      activeBtn.classList.add('bg-amber-500', 'text-slate-950', 'font-semibold', 'shadow-sm');
     }
   </script>
 </body>
