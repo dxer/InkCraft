@@ -105,8 +105,24 @@ AI 自动将入库笔记精炼萃取为标准的原子永久卡片：
 - **双模通信支持**：
   - **SSE 模式 (`GET /mcp`)**：符合标准 Server-Sent Events 协议，适用于长连接 Agent 交互；
   - **Direct JSON-RPC 模式 (`POST /mcp`)**：支持标准无状态 JSON-RPC 2.0 单次调用；
-- **4 大内置 Tools**：`search_cards_by_query`（意图加权检索引擎）、`get_card_detail`（卡片详情）、`list_topics`（选题库）、`list_recent_works`（成品库）；
+- **9 大内置 Tools**：
+  - **原子卡片层**：`search_cards_by_query`（意图检索引擎）、`get_card_detail`（单卡与批量点查）；
+  - **原始文档层**：`list_knowledge_bases`（知识库概览）、`search_documents`（全文检索长篇母档）、`get_document_detail`（长文原文与卡片回溯）；
+  - **网状关联层**：`find_related_cards`（概念线索与拓扑关联发现）、`list_tags_and_concepts`（全局认知分布图谱）；
+  - **创作与文风层**：`list_topics`（选题灵感与大纲）、`list_recent_works`（历史成稿文风对齐）；
 - **安全鉴权机制**：内置基于 SHA-256 的 API Key 管理看板，每次调用自动记录活跃审计。
+
+---
+
+## 🧩 浏览器剪藏扩展插件 (Chrome / Edge)
+
+墨匠配备了专用的浏览器剪藏插件，支持一键将文章、推文和网页选区沉淀入知识库：
+
+1. **直接下载**：在 GitHub 仓库的 **Releases** 或 **Actions Artifacts** 页面直接下载预编译好的 `inkcraft-extension.zip` 并解压；
+2. **本地加载**：打开 Chrome / Edge 浏览器，进入 `chrome://extensions/`，开启右上角「开发者模式」，点击「加载已解压的扩展程序」，选择解压后的目录即可；
+3. **连接墨匠**：在插件弹窗中填入墨匠服务地址（如 `http://localhost:3000`）并完成连通测试。
+
+> **本地自行构建插件**：在根目录下执行 `pnpm build:extension`，构建产物将输出在 `extension/dist`。
 
 ---
 

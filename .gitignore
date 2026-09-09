@@ -49,6 +49,8 @@ next-env.d.ts
 
 # extension build output
 extension/dist/
+extension/*.zip
+*.zip
 
 # local AI session / dev artifacts
 .zcode/

@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+name: Build and Publish Docker Image & Extension
 
 on:
   push:
@@ -24,7 +24,9 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # ================= Job 1: 构建并发布多架构 Docker 镜像 =================
   build-and-push:
+    name: Build Docker Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,3 +74,52 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-cache
           cache-to: type=gha,scope=build-cache,ignore-error=true,mode=max,enabled=${{ github.event_name != 'pull_request' }}
+
+  # ================= Job 2: 构建并打包浏览器剪藏扩展插件 =================
+  build-extension:
+    name: Build Browser Extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 允许上传 assets 到 GitHub Releases
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: extension/pnpm-lock.yaml
+
+      - name: 安装扩展依赖并执行构建
+        working-directory: extension
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: 打包扩展产物为 Zip 压缩包
+        run: |
+          cd extension/dist
+          zip -r ../../inkcraft-extension.zip .
+
+      - name: 上传扩展产物 (GitHub Actions Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkcraft-extension
+          path: inkcraft-extension.zip
+          retention-days: 30
+
+      - name: 挂载到 GitHub Release 附件 (仅发布 Tag 时自动关联)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: inkcraft-extension.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:extension": "cd extension && pnpm install && pnpm build",
     "start": "next start",
     "lint": "eslint",
     "test": "node --test-concurrency=1 --import tsx --test \"src/lib/test/**/*.test.ts\""
