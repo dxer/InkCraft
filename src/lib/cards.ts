@@ -209,17 +209,17 @@ export function getCardForDoc(docId: string): KnowledgeCard | null {
 }
 
 /** 获取全部卡片（带笔记标题与笔记受控标签，按创建时间倒序） */
-export function getAllCards(): (KnowledgeCard & { note_title: string | null; note_tags?: string[] })[] {
+export function getAllCards(): (KnowledgeCard & { note_title: string | null; note_tags?: string[]; kb_id?: string })[] {
   const db = getDb();
   const rows = db
     .prepare(
       `SELECT c.id, c.document_id, c.content_md, c.created_at, c.updated_at,
-              ki.title AS note_title, ki.tags AS note_tags_raw
+              ki.title AS note_title, ki.tags AS note_tags_raw, ki.kb_id
        FROM knowledge_cards c
        JOIN knowledge_items ki ON ki.id = c.document_id
        ORDER BY c.created_at DESC`
     )
-    .all() as (KnowledgeCard & { note_title: string | null; note_tags_raw: string | null })[];
+    .all() as (KnowledgeCard & { note_title: string | null; note_tags_raw: string | null; kb_id?: string })[];
 
   return rows.map((r) => {
     let noteTags: string[] = [];
@@ -241,6 +241,7 @@ export function getAllCards(): (KnowledgeCard & { note_title: string | null; not
       ...r,
       note_title: r.note_title ?? null,
       note_tags: noteTags,
+      kb_id: r.kb_id || "default",
     };
   });
 }

@@ -16,6 +16,9 @@ export interface TopicFilterOptions {
   targetSkill?: string;
   search?: string;
   sourceType?: "all" | "auto" | "manual";
+  excludeIds?: string[];
+  orderBy?: "recent" | "score" | "random";
+  minScore?: number;
   limit?: number;
   offset?: number;
 }
@@ -219,14 +222,38 @@ export function getTopicsFromDb(
     params.push(options.sourceType);
   }
 
+  if (options.minScore && typeof options.minScore === "number") {
+    conditions.push("(score IS NULL OR score >= ?)");
+    params.push(options.minScore);
+  }
+
+  if (options.excludeIds && Array.isArray(options.excludeIds) && options.excludeIds.length > 0) {
+    const validIds = options.excludeIds.filter((id) => typeof id === "string" && id.trim());
+    if (validIds.length > 0) {
+      const placeholders = validIds.map(() => "?").join(", ");
+      conditions.push(`id NOT IN (${placeholders})`);
+      params.push(...validIds);
+    }
+  }
+
   if (options.search && options.search.trim()) {
-    conditions.push("(title LIKE ? OR angle LIKE ? OR core_argument LIKE ?)");
+    conditions.push("(title LIKE ? OR angle LIKE ? OR core_argument LIKE ? OR hook LIKE ?)");
     const kw = `%${options.search.trim()}%`;
-    params.push(kw, kw, kw);
+    params.push(kw, kw, kw, kw);
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  let orderClause = "ORDER BY created_at DESC";
+  if (options.orderBy === "random") {
+    orderClause = "ORDER BY RANDOM()";
+  } else if (options.orderBy === "score") {
+    orderClause = "ORDER BY score DESC, created_at DESC";
+  } else if (options.orderBy === "recent") {
+    orderClause = "ORDER BY created_at DESC";
+  }
+
   const limitClause = options.limit ? `LIMIT ${Number(options.limit)}` : "";
   const offsetClause = options.offset ? `OFFSET ${Number(options.offset)}` : "";
 
@@ -234,7 +261,7 @@ export function getTopicsFromDb(
     SELECT id, title, angle, hook, target_skill, score, score_tag, outline, angle_type, fingerprint, target_audience, title_options, core_argument, outline_structured, matched_cards, source_note_ids, source_type, status, used_project_id, created_at, updated_at
     FROM topic_repository
     ${whereClause}
-    ORDER BY created_at DESC
+    ${orderClause}
     ${limitClause} ${offsetClause}
   `;
 

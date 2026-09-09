@@ -13,11 +13,14 @@ export interface CardSearchResult {
   boundary: string;
   tags: string[];
   noteTitle: string;
+  fullContentMd?: string;
 }
 
 export interface CardSearchOptions {
   query?: string;
   tags?: string[];
+  kbId?: string;
+  includeContent?: boolean;
   limit?: number;
   minScore?: number;
 }
@@ -98,7 +101,7 @@ function findHits(input: unknown, keywords: string[]): string[] {
 export function searchCardsByRelevance(
   options: CardSearchOptions = {},
 ): { query: string; totalMatched: number; results: CardSearchResult[] } {
-  const { query = "", tags = [], limit = 8, minScore = 15 } = options;
+  const { query = "", tags = [], kbId, includeContent = false, limit = 8, minScore = 15 } = options;
   const rawCards = getAllCards();
   const trimmedQuery = query.trim();
   const keywords = extractKeywords(trimmedQuery);
@@ -106,6 +109,11 @@ export function searchCardsByRelevance(
   const matchedList: CardSearchResult[] = [];
 
   for (const card of rawCards) {
+    // 知识库过滤
+    if (kbId && (card as any).kb_id && (card as any).kb_id !== kbId) {
+      continue;
+    }
+
     const fields = parseCardFields(card.content_md);
     const cardTags: string[] = Array.isArray(card.note_tags) ? card.note_tags : [];
 
@@ -138,6 +146,7 @@ export function searchCardsByRelevance(
         boundary,
         tags: cardTags,
         noteTitle,
+        ...(includeContent ? { fullContentMd: contentMd } : {}),
       });
       continue;
     }
@@ -212,6 +221,7 @@ export function searchCardsByRelevance(
         boundary,
         tags: cardTags,
         noteTitle,
+        ...(includeContent ? { fullContentMd: contentMd } : {}),
       });
     }
   }
