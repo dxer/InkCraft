@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>墨匠 InkCraft - 本地优先的现代 AI 内容创作工坊</title>
   <meta name="description" content="墨匠 (InkCraft) - 面向深度创作者的本地优先 AI 创作中枢。融合卢曼原子卡片盒、智能选题雷达、全渠道文风克隆与 9 大 MCP 开放协议。" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m12 19 7-7 3 3-7 7-3-3z'/><path d='m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/><path d='m2 2 7.586 7.586'/><circle cx='11' cy='11' r='2'/></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect width='32' height='32' rx='7.2' fill='%23f59e0b'/><path d='M16 4.6C17.7 9.1 21.9 11.6 21.9 16.9A5.9 5.9 0 1 1 10.1 16.9C10.1 11.6 14.3 9.1 16 4.6Z' fill='%2306070a'/><rect x='8.2' y='25.5' width='15.6' height='3' rx='1.5' fill='%2306070a'/></svg>" />
   
   <!-- 字体预加载 -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -96,12 +96,11 @@
   <header class="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-ink-950/85 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <a href="#" class="flex items-center gap-3 group">
-        <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m12 19 7-7 3 3-7 7-3-3z"/>
-            <path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-            <path d="m2 2 7.586 7.586"/>
-            <circle cx="11" cy="11" r="2"/>
+        <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center p-1.5 group-hover:scale-105 transition-transform">
+          <svg viewBox="0 0 32 32" fill="none" class="w-full h-full">
+            <rect width="32" height="32" rx="7.2" fill="#f59e0b" />
+            <path d="M16 4.6C17.7 9.1 21.9 11.6 21.9 16.9A5.9 5.9 0 1 1 10.1 16.9C10.1 11.6 14.3 9.1 16 4.6Z" fill="#06070a" />
+            <rect x="8.2" y="25.5" width="15.6" height="3" rx="1.5" fill="#06070a" />
           </svg>
         </div>
         <span class="font-serif font-bold text-lg text-white tracking-wide">墨匠 <span class="text-xs font-sans font-medium tracking-widest text-amber-400/90 ml-1 uppercase">InkCraft</span></span>
@@ -127,9 +126,20 @@
   </header>
 
   <!-- Hero 头部区域 -->
-  <section class="relative pt-20 pb-20 md:pt-28 md:pb-32 overflow-hidden">
+  <section class="relative pt-16 pb-20 md:pt-24 md:pb-32 overflow-hidden">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       
+      <!-- 官方品牌 Logo 徽标 -->
+      <div class="flex justify-center mb-6">
+        <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 p-2.5 shadow-2xl shadow-amber-500/10 hover:scale-105 transition-transform">
+          <svg viewBox="0 0 32 32" fill="none" class="w-full h-full">
+            <rect width="32" height="32" rx="7.2" fill="#f59e0b" />
+            <path d="M16 4.6C17.7 9.1 21.9 11.6 21.9 16.9A5.9 5.9 0 1 1 10.1 16.9C10.1 11.6 14.3 9.1 16 4.6Z" fill="#06070a" />
+            <rect x="8.2" y="25.5" width="15.6" height="3" rx="1.5" fill="#06070a" />
+          </svg>
+        </div>
+      </div>
+
       <!-- 标签 Badge -->
       <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-medium mb-8">
         <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
@@ -663,7 +673,17 @@ pnpm dev       <span class="text-slate-500"># 访问 http://localhost:3000</span
 
   <!-- 页脚 -->
   <footer class="border-t border-white/[0.06] bg-ink-950 py-12 text-center text-xs text-slate-500">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
+      <div class="flex items-center justify-center gap-2.5">
+        <div class="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 p-1 flex items-center justify-center">
+          <svg viewBox="0 0 32 32" fill="none" class="w-full h-full">
+            <rect width="32" height="32" rx="7.2" fill="#f59e0b" />
+            <path d="M16 4.6C17.7 9.1 21.9 11.6 21.9 16.9A5.9 5.9 0 1 1 10.1 16.9C10.1 11.6 14.3 9.1 16 4.6Z" fill="#06070a" />
+            <rect x="8.2" y="25.5" width="15.6" height="3" rx="1.5" fill="#06070a" />
+          </svg>
+        </div>
+        <span class="font-serif font-bold text-sm text-slate-300">墨匠 InkCraft</span>
+      </div>
       <div class="flex items-center justify-center gap-6 text-sm text-slate-400">
         <a href="https://github.com/dxer/InkCraft" target="_blank" class="hover:text-amber-400 transition-colors">GitHub 仓库</a>
         <a href="https://github.com/dxer/InkCraft/releases" target="_blank" class="hover:text-amber-400 transition-colors">版本发布</a>
